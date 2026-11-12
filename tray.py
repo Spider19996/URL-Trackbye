@@ -11,7 +11,7 @@ import time
 from PyQt6.QtCore import QLocale, QProcess, QTimer, QUrl, Qt
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QPainter, QPalette, QPixmap
-from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
                              QPlainTextEdit, QPushButton, QSystemTrayIcon, QTableWidget, QTableWidgetItem, QTabWidget,
                              QVBoxLayout, QWidget)
 
@@ -115,9 +115,35 @@ TEXT = {
     'ext_older': ('an older version', 'eine ältere Version'),
     'ext_page': ('Open the extensions page', 'Erweiterungsseite öffnen'),
     'ext_notice_title': ('URL Trackbye: update the extension', 'URL Trackbye: Erweiterung aktualisieren'),
+    'quick_head': ('Quick settings in the tray menu (right click)', 'Schnelleinstellungen im Tray-Menü (Rechtsklick)'),
+    'm_clipboard': ('Clean copied links', 'Kopierte Links säubern'),
+    'm_notify': ('Notifications', 'Benachrichtigungen'),
+    'm_log': ('Keep log', 'Protokoll führen'),
+    'm_autostart': ('Start with the desktop', 'Mit dem Desktop starten'),
     'show_builtin': ('Show built-in rules', 'Eingebaute Regeln anzeigen'),
 }
 LANG = 1 if QLocale.system().name().startswith('de') else 0
+
+
+# key, label in the settings window, short label in the tray menu, theme icon name
+OPTIONS = [
+    ('clipboard', 'clip', 'm_clipboard', 'edit-paste'),
+    ('notify', 'notify', 'm_notify', 'preferences-desktop-notification'),
+    ('log', 'log_on', 'm_log', 'view-list-text'),
+    ('autostart', 'autostart', 'm_autostart', 'system-run'),
+]
+
+
+def option_state(key):
+    if key == 'autostart':
+        return os.path.exists(tb.AUTOSTART)
+    return bool(tb.load_config()[key])
+
+
+def sync(widget, on):
+    widget.blockSignals(True)
+    widget.setChecked(bool(on))
+    widget.blockSignals(False)
 
 
 def t(key, **kw):
@@ -207,23 +233,27 @@ class SettingsWindow(QWidget):
         cfg = tb.load_config()
         page = QWidget()
         form = QVBoxLayout(page)
-        self.chk_clip = QCheckBox(t('clip'))
-        self.chk_clip.setChecked(cfg['clipboard'])
-        self.chk_clip.toggled.connect(self.app.set_clipboard)
-        self.chk_notify = QCheckBox(t('notify'))
-        self.chk_notify.setChecked(cfg['notify'])
-        self.chk_notify.toggled.connect(lambda on: self.save_cfg('notify', on))
-        self.chk_auto = QCheckBox(t('autostart'))
-        self.chk_auto.setChecked(os.path.exists(tb.AUTOSTART))
-        self.chk_auto.toggled.connect(tb.set_autostart)
-        self.chk_log = QCheckBox(t('log_on'))
-        self.chk_log.setChecked(cfg['log'])
-        self.chk_log.toggled.connect(lambda on: self.save_cfg('log', on))
+        self.checks = {}
+        for key, label, _, _ in OPTIONS:
+            chk = QCheckBox(t(label))
+            chk.setChecked(option_state(key))
+            chk.toggled.connect(lambda on, k=key: self.app.set_option(k, on))
+            self.checks[key] = chk
+            form.addWidget(chk)
         self.chk_tray = QCheckBox(t('tray_icon'))
         self.chk_tray.setChecked(cfg['tray_icon'])
         self.chk_tray.toggled.connect(self.app.set_tray_visible)
-        for w in (self.chk_clip, self.chk_notify, self.chk_log, self.chk_auto, self.chk_tray):
-            form.addWidget(w)
+        form.addWidget(self.chk_tray)
+        quick = QGroupBox(t('quick_head'))
+        quick_box = QVBoxLayout(quick)
+        self.quick_checks = {}
+        for key, _, menu_label, _ in OPTIONS:
+            chk = QCheckBox(t(menu_label))
+            chk.setChecked(key in cfg['quick'])
+            chk.toggled.connect(self.save_quick)
+            self.quick_checks[key] = chk
+            quick_box.addWidget(chk)
+        form.addWidget(quick)
         if not ClipboardService.available():
             warn = QLabel(t('no_wl'))
             warn.setWordWrap(True)
@@ -239,6 +269,10 @@ class SettingsWindow(QWidget):
         quit_btn.clicked.connect(self.app.quit)
         form.addWidget(quit_btn, alignment=Qt.AlignmentFlag.AlignRight)
         return page
+
+    def save_quick(self):
+        self.save_cfg('quick', [k for k, _, _, _ in OPTIONS if self.quick_checks[k].isChecked()])
+        self.app.rebuild_menu()
 
     def save_cfg(self, key, value):
         cfg = tb.load_config()
@@ -651,29 +685,11 @@ class TrayApp:
         self.icon_off = QIcon(dim)
 
         self.tray = QSystemTrayIcon()
-        menu = QMenu()
-        title = QAction(t('title'))
-        title.setEnabled(False)
-        self.act_clip = QAction(t('clip'))
-        self.act_clip.setCheckable(True)
-        self.act_clip.toggled.connect(self.set_clipboard)
-        act_settings = QAction(t('settings'))
-        act_settings.triggered.connect(self.show_settings)
-        act_quit = QAction(t('quit'))
-        act_quit.triggered.connect(self.quit)
-        for a in (title, self.act_clip):
-            menu.addAction(a)
-        menu.addSeparator()
-        menu.addAction(act_settings)
-        menu.addAction(act_quit)
-        self.menu = menu
-        self.tray.setContextMenu(menu)
+        self.option_actions = {}
+        self.rebuild_menu()
         self.tray.activated.connect(self.on_activated)
 
         on = tb.load_config()['clipboard']
-        self.act_clip.blockSignals(True)
-        self.act_clip.setChecked(on)
-        self.act_clip.blockSignals(False)
         self.apply(on)
         tb.diag('info', 'URL Trackbye %s started' % tb.VERSION)
         self.seen = max([e.get('t', 0) for e in tb.read_events()] or [0])
@@ -692,20 +708,54 @@ class TrayApp:
         self.tray.setIcon(self.icon_on if on else self.icon_off)
         self.tray.setToolTip(t('title') + (' – ' + t('clip') if on else ''))
 
-    def set_clipboard(self, on):
-        cfg = tb.load_config()
-        cfg['clipboard'] = bool(on)
-        tb.save_config(cfg)
-        self.apply(on)
-        for w, name in ((self.act_clip, None),):
-            if w.isChecked() != on:
-                w.blockSignals(True)
-                w.setChecked(on)
-                w.blockSignals(False)
-        if self.window is not None and self.window.chk_clip.isChecked() != on:
-            self.window.chk_clip.blockSignals(True)
-            self.window.chk_clip.setChecked(on)
-            self.window.chk_clip.blockSignals(False)
+    def rebuild_menu(self):
+        """Tray (right click) menu: the quick settings you picked, then Settings and Quit, with icons."""
+        menu = QMenu()
+        title = QAction(QIcon(ICON), 'URL Trackbye ' + tb.VERSION, menu)  # parent keeps the action alive
+        title.setEnabled(False)
+        menu.addAction(title)
+        menu.addSeparator()
+        quick = tb.load_config()['quick']
+        self.option_actions = {}
+        for key, _, menu_label, icon in OPTIONS:
+            if key not in quick:
+                continue
+            act = QAction(QIcon.fromTheme(icon), t(menu_label), menu)
+            act.setCheckable(True)
+            act.setChecked(option_state(key))
+            act.toggled.connect(lambda on, k=key: self.set_option(k, on))
+            menu.addAction(act)
+            self.option_actions[key] = act
+        if self.option_actions:
+            menu.addSeparator()
+        act_settings = QAction(QIcon.fromTheme('configure', QIcon.fromTheme('preferences-system')), t('settings'), menu)
+        act_settings.triggered.connect(self.show_settings)
+        act_quit = QAction(QIcon.fromTheme('application-exit'), t('quit'), menu)
+        act_quit.triggered.connect(self.quit)
+        menu.addAction(act_settings)
+        menu.addAction(act_quit)
+        self.menu = menu
+        self.tray.setContextMenu(menu)
+
+    def set_option(self, key, on):
+        on = bool(on)
+        if key == 'autostart':
+            tb.set_autostart(on)
+        else:
+            cfg = tb.load_config()
+            cfg[key] = on
+            tb.save_config(cfg)
+            if key == 'clipboard':
+                self.apply(on)
+        self.refresh_checks()
+
+    def refresh_checks(self):
+        """Keep the menu entries and the settings window checkboxes in line with the real state."""
+        for key, act in self.option_actions.items():
+            sync(act, option_state(key))
+        if self.window is not None:
+            for key, chk in self.window.checks.items():
+                sync(chk, option_state(key))
 
     def check_extension(self):
         """Tell the user once per available version when the browser still runs an older extension."""

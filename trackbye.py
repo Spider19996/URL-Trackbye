@@ -35,7 +35,7 @@ EVENTS_PATH = os.path.join(STATE_DIR, 'events.jsonl')
 EVENTS_MAX = 300
 EXTENSION_STATE = os.path.join(STATE_DIR, 'extension.json')
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
-                  'log': True, 'tray_icon': True}
+                  'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify']}
 SCRIPT = os.path.realpath(__file__)
 VERSION = '0.5.0'
 
