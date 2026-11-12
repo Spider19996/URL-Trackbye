@@ -8,10 +8,11 @@ import shutil
 import sys
 import time
 
-from PyQt6.QtCore import QLocale, QProcess, QTimer, QUrl, Qt
+from PyQt6.QtCore import QLocale, QProcess, QSize, QTimer, QUrl, Qt
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QPainter, QPalette, QPixmap
-from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+                             QListWidgetItem, QMenu, QMessageBox, QScrollArea, QStackedWidget,
                              QPlainTextEdit, QPushButton, QSystemTrayIcon, QTableWidget, QTableWidgetItem, QTabWidget,
                              QVBoxLayout, QWidget)
 
@@ -29,13 +30,19 @@ TEXT = {
     'clip': ('Clean copied links', 'Kopierte Links säubern'),
     'notify': ('Show a notification when a link was cleaned', 'Benachrichtigung zeigen, wenn ein Link gesäubert wurde'),
     'autostart': ('Start with the desktop session', 'Mit der Desktop-Sitzung starten'),
-    'browser': ('Browser command (used to open links)', 'Browser-Befehl (zum Öffnen von Links)'),
+    'browser': ('Your browser (command)', 'Dein Browser (Befehl)'),
     'settings': ('Settings…', 'Einstellungen…'),
     'quit': ('Quit', 'Beenden'),
     'tab_general': ('General', 'Allgemein'),
     'tab_rules': ('Rules', 'Regeln'),
     'tab_browser': ('Browser', 'Browser'),
-    'tab_about': ('Info and log', 'Info und Protokoll'),
+    'tab_about': ('About', 'Info'),
+    'grp_cleaning': ('Link cleaning', 'Links säubern'),
+    'grp_start': ('Start and tray symbol', 'Start und Tray-Symbol'),
+    'browser_hint': ('Used when URL Trackbye opens a link for another app and for the browser test.', 'Wird genutzt, wenn URL Trackbye einen Link für ein anderes Programm öffnet und für den Browser-Test.'),
+    'sub_general': ('Everything that works without further setup.', 'Alles, was ohne weitere Einrichtung funktioniert.'),
+    'sub_browser': ('Connect your browser and your other apps.', 'Verbinde deinen Browser und deine anderen Programme.'),
+    'tab_test': ('Test', 'Test'),
     'no_wl': ('wl-clipboard (wl-paste, wl-copy) is missing: copied links cannot be cleaned. Install it: sudo apt install wl-clipboard',
               'wl-clipboard (wl-paste, wl-copy) fehlt: kopierte Links können nicht gesäubert werden. Installieren: sudo apt install wl-clipboard'),
     'rules_help': ('Your own additions to the built-in rules. One parameter name per line (exact names, no wildcards).',
@@ -117,6 +124,9 @@ TEXT = {
     'ext_older': ('an older version', 'eine ältere Version'),
     'ext_page': ('Open the extensions page', 'Erweiterungsseite öffnen'),
     'ext_notice_title': ('URL Trackbye: update the extension', 'URL Trackbye: Erweiterung aktualisieren'),
+    'tray_icon_short': ('Show the tray symbol', 'Tray-Symbol anzeigen'),
+    'tray_hint': ('If hidden: start URL Trackbye again or use the application menu entry "URL Trackbye" to open this window.',
+                  'Wenn ausgeblendet: URL Trackbye erneut starten oder den Eintrag "URL Trackbye" im Anwendungsmenü nutzen, um dieses Fenster zu öffnen.'),
     'quick_head': ('Quick settings in the tray menu (right click)', 'Schnelleinstellungen im Tray-Menü (Rechtsklick)'),
     'm_clipboard': ('Clean copied links', 'Kopierte Links säubern'),
     'm_notify': ('Notifications', 'Benachrichtigungen'),
@@ -133,7 +143,6 @@ TEXT = {
     'ph_excluded': ('e.g. shop.example.org (one domain per line)', 'z. B. shop.example.org (eine Domain pro Zeile)'),
     'try_hint': ('Changes show here right away; they only apply to real links after you press Save.',
                  'Änderungen sieht man hier sofort; für echte Links gelten sie erst nach "Speichern".'),
-    'tab_test': ('Test', 'Test'),
     'tst_help': ('Try each part with this example link. The tracking parts (utm_source, utm_medium, fbclid) should disappear, only "?id=5" should stay.',
                  'Probiere jeden Teil mit diesem Beispiel-Link aus. Die Tracking-Teile (utm_source, utm_medium, fbclid) sollten verschwinden, nur "?id=5" bleibt.'),
     'tst_url': ('Example link (with tracking):', 'Beispiel-Link (mit Tracking):'),
@@ -258,55 +267,117 @@ class SettingsWindow(QWidget):
         self.app = app
         self.setWindowTitle(t('title'))
         self.setWindowIcon(QIcon(ICON))
-        self.resize(640, 560)
-        tabs = QTabWidget()
-        tabs.addTab(self.general_tab(), t('tab_general'))
-        tabs.addTab(self.rules_tab(), t('tab_rules'))
-        tabs.addTab(self.browser_tab(), t('tab_browser'))
-        tabs.addTab(self.about_tab(), t('tab_about'))
-        layout = QVBoxLayout(self)
-        layout.addWidget(tabs)
+        self.resize(920, 640)
+        self.setMinimumSize(800, 540)
+        # Sidebar with icons on the left, one page at a time on the right.
+        pages = (('tab_general', 'preferences-system', '⚙', self.general_tab),
+                 ('tab_rules', 'view-filter', '≡', self.rules_tab),
+                 ('tab_browser', 'internet-web-browser', '◎', self.browser_tab),
+                 ('tab_test', 'dialog-ok-apply', '✓', self.test_tab),
+                 ('tab_log', 'view-list-text', '☰', self.log_tab),
+                 ('tab_events', 'dialog-information', '!', self.events_tab),
+                 ('tab_about', 'help-about', 'i', self.about_tab))
+        self.nav = QListWidget()
+        self.nav.setFixedWidth(200)
+        self.nav.setIconSize(QSize(24, 24))
+        self.nav.setSpacing(2)
+        self.nav.setStyleSheet('QListWidget { border: none; background: transparent; } '
+                               'QListWidget::item { padding: 8px 6px; border-radius: 6px; }')
+        self.stack = QStackedWidget()
+        for key, icon_name, glyph, builder in pages:
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+            scroll.setWidget(builder())
+            self.stack.addWidget(scroll)
+            icon = QIcon.fromTheme(icon_name)
+            item = QListWidgetItem(icon, t(key) if not icon.isNull() else glyph + '   ' + t(key))
+            self.nav.addItem(item)
+        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+        self.nav.setCurrentRow(0)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 8, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.nav)
+        layout.addWidget(self.stack, 1)
+
+    def new_page(self, title, subtitle=''):
+        page = QWidget()
+        box = QVBoxLayout(page)
+        box.setContentsMargins(24, 16, 24, 20)
+        box.setSpacing(14)
+        head = QLabel('<span style="font-size:17pt"><b>' + title + '</b></span>')
+        box.addWidget(head)
+        if subtitle:
+            sub = QLabel(subtitle)
+            sub.setWordWrap(True)
+            sub.setStyleSheet('color: gray')
+            box.addWidget(sub)
+        return page, box
+
+    @staticmethod
+    def group(title):
+        g = QGroupBox(title)
+        lay = QVBoxLayout(g)
+        lay.setSpacing(8)
+        lay.setContentsMargins(14, 14, 14, 12)
+        return g, lay
 
     # --- General ---------------------------------------------------------------------------------------------
     def general_tab(self):
         cfg = tb.load_config()
-        page = QWidget()
-        form = QVBoxLayout(page)
+        page, box = self.new_page(t('tab_general'), t('sub_general'))
         self.checks = {}
+        g1, l1 = self.group(t('grp_cleaning'))
+        g2, l2 = self.group(t('grp_start'))
         for key, label, _, _ in OPTIONS:
             chk = QCheckBox(t(label))
             chk.setChecked(option_state(key))
             chk.toggled.connect(lambda on, k=key: self.app.set_option(k, on))
             self.checks[key] = chk
-            form.addWidget(chk)
-        self.chk_tray = QCheckBox(t('tray_icon'))
+            (l2 if key == 'autostart' else l1).addWidget(chk)
+        self.chk_tray = QCheckBox(t('tray_icon_short'))
         self.chk_tray.setChecked(cfg['tray_icon'])
         self.chk_tray.toggled.connect(self.app.set_tray_visible)
-        form.addWidget(self.chk_tray)
-        quick = QGroupBox(t('quick_head'))
-        quick_box = QVBoxLayout(quick)
-        self.quick_checks = {}
-        for key, _, menu_label, _ in OPTIONS:
-            chk = QCheckBox(t(menu_label))
-            chk.setChecked(key in cfg['quick'])
-            chk.toggled.connect(self.save_quick)
-            self.quick_checks[key] = chk
-            quick_box.addWidget(chk)
-        form.addWidget(quick)
+        l2.addWidget(self.chk_tray)
+        hint = QLabel(t('tray_hint'))
+        hint.setWordWrap(True)
+        hint.setStyleSheet('color: gray')
+        l2.addWidget(hint)
+        box.addWidget(g1)
         if not ClipboardService.available():
             warn = QLabel(t('no_wl'))
             warn.setWordWrap(True)
             warn.setStyleSheet('color: #c0392b')
-            form.addWidget(warn)
-        row = QFormLayout()
+            l1.addWidget(warn)
+        box.addWidget(g2)
+
+        quick = QGroupBox(t('quick_head'))
+        grid = QGridLayout(quick)
+        grid.setContentsMargins(14, 14, 14, 12)
+        self.quick_checks = {}
+        for i, (key, _, menu_label, icon_name) in enumerate(OPTIONS):
+            chk = QCheckBox(t(menu_label))
+            chk.setIcon(QIcon.fromTheme(icon_name))
+            chk.setChecked(key in cfg['quick'])
+            chk.toggled.connect(self.save_quick)
+            self.quick_checks[key] = chk
+            grid.addWidget(chk, i // 2, i % 2)
+        box.addWidget(quick)
+
+        g3, l3 = self.group(t('browser'))
         self.edit_browser = QLineEdit(cfg['browser'])
         self.edit_browser.editingFinished.connect(lambda: self.save_cfg('browser', self.edit_browser.text().strip() or 'vivaldi-stable'))
-        row.addRow(t('browser'), self.edit_browser)
-        form.addLayout(row)
-        form.addStretch(1)
-        quit_btn = QPushButton(t('quit_app'))
+        l3.addWidget(self.edit_browser)
+        bh = QLabel(t('browser_hint'))
+        bh.setWordWrap(True)
+        bh.setStyleSheet('color: gray')
+        l3.addWidget(bh)
+        box.addWidget(g3)
+        box.addStretch(1)
+        quit_btn = QPushButton(QIcon.fromTheme('application-exit'), t('quit_app'))
         quit_btn.clicked.connect(self.app.quit)
-        form.addWidget(quit_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        box.addWidget(quit_btn, alignment=Qt.AlignmentFlag.AlignRight)
         return page
 
     def save_quick(self):
@@ -320,65 +391,54 @@ class SettingsWindow(QWidget):
 
     # --- Rules -----------------------------------------------------------------------------------------------
     def rules_tab(self):
-        page = QWidget()
-        box = QVBoxLayout(page)
-        help_label = QLabel(t('rules_help'))
-        help_label.setWordWrap(True)
-        box.addWidget(help_label)
+        page, box = self.new_page(t('tab_rules'), t('rules_help'))
         rules = tb.user_rules()
 
-        box.addWidget(QLabel(t('global')))
+        top = QHBoxLayout()
+        top.setSpacing(14)
+        g_global, l_global = self.group(t('global'))
         self.ed_global = QPlainTextEdit('\n'.join(rules['global_remove']))
-        self.ed_global.setMaximumHeight(80)
+        self.ed_global.setMaximumHeight(90)
         self.ed_global.setPlaceholderText(t('ph_global'))
-        box.addWidget(self.ed_global)
-
-        box.addWidget(QLabel(t('excluded')))
+        l_global.addWidget(self.ed_global)
+        g_excl, l_excl = self.group(t('excluded'))
         self.ed_excluded = QPlainTextEdit('\n'.join(rules['exclude_hosts']))
-        self.ed_excluded.setMaximumHeight(60)
+        self.ed_excluded.setMaximumHeight(90)
         self.ed_excluded.setPlaceholderText(t('ph_excluded'))
-        box.addWidget(self.ed_excluded)
+        l_excl.addWidget(self.ed_excluded)
+        top.addWidget(g_global)
+        top.addWidget(g_excl)
+        box.addLayout(top)
 
-        box.addWidget(QLabel(t('sites')))
+        g_sites, l_sites = self.group(t('sites'))
         example = QLabel(t('example_text'))
         example.setWordWrap(True)
         example.setStyleSheet('color: gray')
-        box.addWidget(example)
+        l_sites.addWidget(example)
         self.tbl = QTableWidget(0, 2)
         self.tbl.setHorizontalHeaderLabels([t('col_domains'), t('col_params')])
         self.tbl.horizontalHeader().setStretchLastSection(True)
-        self.tbl.setColumnWidth(0, 250)
+        self.tbl.setColumnWidth(0, 260)
+        self.tbl.setMinimumHeight(130)
         for site in rules['sites']:
             self.add_site_row(', '.join(site.get('hosts', [])), ', '.join(site.get('remove', [])))
-        box.addWidget(self.tbl)
+        l_sites.addWidget(self.tbl)
         buttons = QHBoxLayout()
-        add = QPushButton(t('add_row'))
+        add = QPushButton(QIcon.fromTheme('list-add'), t('add_row'))
         add.clicked.connect(lambda: self.add_site_row('', ''))
-        delete = QPushButton(t('del_row'))
+        delete = QPushButton(QIcon.fromTheme('list-remove'), t('del_row'))
         delete.clicked.connect(lambda: [self.tbl.removeRow(i.row()) for i in sorted(self.tbl.selectionModel().selectedRows(), key=lambda x: -x.row())])
-        example_btn = QPushButton(t('insert_example'))
+        example_btn = QPushButton(QIcon.fromTheme('help-hint'), t('insert_example'))
         example_btn.clicked.connect(self.insert_example)
-        save = QPushButton(t('save'))
-        save.clicked.connect(self.save_rules)
-        self.saved_label = QLabel('')
         for b in (add, delete, example_btn):
             buttons.addWidget(b)
         buttons.addStretch(1)
-        buttons.addWidget(self.saved_label)
-        buttons.addWidget(save)
-        box.addLayout(buttons)
+        l_sites.addLayout(buttons)
+        box.addWidget(g_sites)
 
-        merged = tb.load_rules()
-        builtin = QPushButton(t('show_builtin'))
-        builtin.clicked.connect(self.show_builtin)
-        info = QHBoxLayout()
-        info.addWidget(QLabel(t('builtin', p=len(merged['global_remove']), s=len(merged['sites']))))
-        info.addStretch(1)
-        info.addWidget(builtin)
-        box.addLayout(info)
-
-        box.addWidget(QLabel(t('try')))
+        g_try, l_try = self.group(t('try'))
         self.try_in = QLineEdit()
+        self.try_in.setPlaceholderText('https://…')
         self.try_out = QLabel('')
         self.try_out.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.try_out.setWordWrap(True)
@@ -388,9 +448,26 @@ class SettingsWindow(QWidget):
         self.tbl.itemChanged.connect(self.update_try)
         hint = QLabel(t('try_hint'))
         hint.setStyleSheet('color: gray')
-        box.addWidget(self.try_in)
-        box.addWidget(self.try_out)
-        box.addWidget(hint)
+        hint.setWordWrap(True)
+        l_try.addWidget(self.try_in)
+        l_try.addWidget(self.try_out)
+        l_try.addWidget(hint)
+        box.addWidget(g_try)
+
+        footer = QHBoxLayout()
+        merged = tb.load_rules()
+        builtin = QPushButton(t('show_builtin'))
+        builtin.clicked.connect(self.show_builtin)
+        footer.addWidget(QLabel(t('builtin', p=len(merged['global_remove']), s=len(merged['sites']))))
+        footer.addWidget(builtin)
+        footer.addStretch(1)
+        self.saved_label = QLabel('')
+        footer.addWidget(self.saved_label)
+        save = QPushButton(QIcon.fromTheme('document-save'), t('save'))
+        save.clicked.connect(self.save_rules)
+        footer.addWidget(save)
+        box.addLayout(footer)
+        box.addStretch(1)
         return page
 
     def add_site_row(self, domains, params):
@@ -450,11 +527,8 @@ class SettingsWindow(QWidget):
 
     # --- Test ------------------------------------------------------------------------------------------------
     def test_tab(self):
-        page = QWidget()
-        box = QVBoxLayout(page)
-        help_label = QLabel(t('tst_help'))
-        help_label.setWordWrap(True)
-        box.addWidget(help_label)
+        page, box = self.new_page(t('tab_test'), t('tst_help'))
+        g_url, l_url = self.group(t('tst_url'))
         form = QFormLayout()
         url = QLineEdit(TEST_URL)
         url.setReadOnly(True)
@@ -462,29 +536,29 @@ class SettingsWindow(QWidget):
         expected = QLineEdit(tb.clean_url(TEST_URL, tb.load_rules()))
         expected.setReadOnly(True)
         form.addRow(t('tst_expect'), expected)
-        box.addLayout(form)
+        l_url.addLayout(form)
+        box.addWidget(g_url)
         self.tests = {}     # key -> time the test was started
         self.test_labels = {}
-        steps = (('clipboard', 'tst_copy', 'tst_copy_info', 'tst_row_clip', self.test_copy),
-                 ('browser', 'tst_browser', 'tst_browser_info', 'tst_row_browser', self.test_browser),
-                 ('opener', 'tst_system', 'tst_system_info', 'tst_row_system', self.test_system))
-        for key, button, info, row, action in steps:
+        steps = (('clipboard', 'tst_copy', 'tst_copy_info', 'edit-paste', self.test_copy),
+                 ('browser', 'tst_browser', 'tst_browser_info', 'internet-web-browser', self.test_browser),
+                 ('opener', 'tst_system', 'tst_system_info', 'document-open', self.test_system))
+        for key, button, info, icon_name, action in steps:
+            g, lay = self.group(t(button)[3:])
             line = QHBoxLayout()
-            btn = QPushButton(t(button))
-            btn.setMinimumWidth(240)
+            btn = QPushButton(QIcon.fromTheme(icon_name), t(button))
+            btn.setMinimumWidth(250)
             btn.clicked.connect(action)
             line.addWidget(btn)
             text = QLabel(t(info))
             text.setWordWrap(True)
             text.setStyleSheet('color: gray')
             line.addWidget(text, 1)
-            box.addLayout(line)
-            result = QLabel(t('tst_row_' + {'clipboard': 'clip', 'browser': 'browser', 'opener': 'system'}[key]) + ': ' + t('tst_none'))
+            lay.addLayout(line)
+            result = QLabel(t('tst_none'))
             result.setWordWrap(True)
-            result.setContentsMargins(12, 0, 0, 6)
-            result.setMinimumHeight(44)
-            result.setAlignment(Qt.AlignmentFlag.AlignTop)
-            box.addWidget(result)
+            lay.addWidget(result)
+            box.addWidget(g)
             self.test_labels[key] = result
         box.addStretch(1)
         return page
@@ -508,7 +582,7 @@ class SettingsWindow(QWidget):
     def show_test(self, key, text, color=''):
         names = {'clipboard': 'tst_row_clip', 'browser': 'tst_row_browser', 'opener': 'tst_row_system'}
         label = self.test_labels[key]
-        label.setText(t(names[key]) + ': ' + text)
+        label.setText(text)
         label.setStyleSheet('color: ' + color if color else '')
 
     def refresh_tests(self):
@@ -529,24 +603,22 @@ class SettingsWindow(QWidget):
 
     # --- Log -------------------------------------------------------------------------------------------------
     def log_tab(self):
-        page = QWidget()
-        box = QVBoxLayout(page)
-        help_label = QLabel(t('log_help'))
-        help_label.setWordWrap(True)
-        box.addWidget(help_label)
+        page, box = self.new_page(t('tab_log'), t('log_help'))
         self.log_table = QTableWidget(0, 4)
         self.log_table.setHorizontalHeaderLabels([t('col_time'), t('col_source'), t('col_removed'), t('col_link')])
         self.log_table.horizontalHeader().setStretchLastSection(True)
         self.log_table.setColumnWidth(0, 120)
-        self.log_table.setColumnWidth(1, 130)
-        self.log_table.setColumnWidth(2, 170)
+        self.log_table.setColumnWidth(1, 150)
+        self.log_table.setColumnWidth(2, 190)
         self.log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.log_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        box.addWidget(self.log_table)
+        self.log_table.verticalHeader().setVisible(False)
+        self.log_table.setMinimumHeight(300)
+        box.addWidget(self.log_table, 1)
         row = QHBoxLayout()
-        copy = QPushButton(t('log_copy'))
+        copy = QPushButton(QIcon.fromTheme('edit-copy'), t('log_copy'))
         copy.clicked.connect(self.copy_log_link)
-        clear = QPushButton(t('log_clear'))
+        clear = QPushButton(QIcon.fromTheme('edit-clear-history'), t('log_clear'))
         clear.clicked.connect(self.clear_log)
         row.addWidget(copy)
         row.addStretch(1)
@@ -600,11 +672,7 @@ class SettingsWindow(QWidget):
 
     # --- Messages --------------------------------------------------------------------------------------------
     def events_tab(self):
-        page = QWidget()
-        box = QVBoxLayout(page)
-        help_label = QLabel(t('events_help'))
-        help_label.setWordWrap(True)
-        box.addWidget(help_label)
+        page, box = self.new_page(t('tab_events'), t('events_help'))
         self.only_problems = QCheckBox(t('only_problems'))
         self.only_problems.toggled.connect(lambda _: self.refresh_events(True))
         box.addWidget(self.only_problems)
@@ -612,15 +680,16 @@ class SettingsWindow(QWidget):
         self.ev_table.setHorizontalHeaderLabels([t('col_time'), t('col_level'), t('col_message')])
         self.ev_table.horizontalHeader().setStretchLastSection(True)
         self.ev_table.setColumnWidth(0, 120)
-        self.ev_table.setColumnWidth(1, 80)
+        self.ev_table.setColumnWidth(1, 90)
         self.ev_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.ev_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.ev_table.verticalHeader().setVisible(False)
-        box.addWidget(self.ev_table)
+        self.ev_table.setMinimumHeight(300)
+        box.addWidget(self.ev_table, 1)
         row = QHBoxLayout()
-        copy = QPushButton(t('events_copy'))
+        copy = QPushButton(QIcon.fromTheme('edit-copy'), t('events_copy'))
         copy.clicked.connect(self.copy_events)
-        clear = QPushButton(t('events_clear'))
+        clear = QPushButton(QIcon.fromTheme('edit-clear-history'), t('events_clear'))
         clear.clicked.connect(self.clear_events)
         row.addWidget(copy)
         row.addStretch(1)
@@ -670,25 +739,26 @@ class SettingsWindow(QWidget):
 
     # --- Browser ---------------------------------------------------------------------------------------------
     def browser_tab(self):
-        page = QWidget()
-        box = QVBoxLayout(page)
-        box.addWidget(self.heading(t('ext_head')))
+        page, box = self.new_page(t('tab_browser'), t('sub_browser'))
+
+        g_ext, l_ext = self.group(t('ext_head'))
         ext = os.path.join(tb.HERE, 'extension')
         path = QLabel(ext)
         path.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        box.addWidget(path)
+        l_ext.addWidget(path)
         help_label = QLabel(t('ext_help'))
         help_label.setWordWrap(True)
-        box.addWidget(help_label)
-        open_btn = QPushButton(t('open_folder'))
-        open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(ext)))
+        help_label.setStyleSheet('color: gray')
+        l_ext.addWidget(help_label)
         row_ext = QHBoxLayout()
-        row_ext.addWidget(open_btn)
-        page_btn = QPushButton(t('ext_page'))
+        open_btn = QPushButton(QIcon.fromTheme('folder-open'), t('open_folder'))
+        open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(ext)))
+        page_btn = QPushButton(QIcon.fromTheme('internet-web-browser'), t('ext_page'))
         page_btn.clicked.connect(self.open_extensions_page)
+        row_ext.addWidget(open_btn)
         row_ext.addWidget(page_btn)
         row_ext.addStretch(1)
-        box.addLayout(row_ext)
+        l_ext.addLayout(row_ext)
         form = QFormLayout()
         self.ext_installed = QLabel('')
         self.ext_current = QLabel('')
@@ -697,43 +767,47 @@ class SettingsWindow(QWidget):
         form.addRow(t('ext_installed'), self.ext_installed)
         form.addRow(t('ext_current'), self.ext_current)
         form.addRow(t('ext_state'), self.ext_state)
-        box.addLayout(form)
+        l_ext.addLayout(form)
         note = QLabel(t('ext_note'))
         note.setWordWrap(True)
         note.setStyleSheet('color: gray')
-        box.addWidget(note)
+        l_ext.addWidget(note)
+        box.addWidget(g_ext)
 
-        box.addWidget(self.heading(t('native_head')))
+        g_nat, l_nat = self.group(t('native_head'))
         self.native = QTableWidget(len(tb.NATIVE_BROWSERS), 3)
         self.native.setHorizontalHeaderLabels([t('col_browser'), t('col_found'), t('col_reg')])
         self.native.horizontalHeader().setStretchLastSection(True)
-        self.native.setMaximumHeight(170)
+        self.native.setFixedHeight(150)
         self.native.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.native.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         self.native.verticalHeader().setVisible(False)
-        box.addWidget(self.native)
-        self.native_buttons = []
         for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
             self.native.setItem(i, 0, QTableWidgetItem(name))
             self.native.setItem(i, 1, QTableWidgetItem(''))
             self.native.setItem(i, 2, QTableWidgetItem(''))
-        reg = QPushButton(t('register'))
+        l_nat.addWidget(self.native)
+        reg = QPushButton(QIcon.fromTheme('network-connect'), t('register'))
         reg.clicked.connect(self.register_native)
-        box.addWidget(reg, alignment=Qt.AlignmentFlag.AlignLeft)
+        l_nat.addWidget(reg, alignment=Qt.AlignmentFlag.AlignLeft)
+        box.addWidget(g_nat)
 
-        box.addWidget(self.heading(t('opener_head')))
+        g_open, l_open = self.group(t('opener_head'))
         help2 = QLabel(t('opener_help'))
         help2.setWordWrap(True)
-        box.addWidget(help2)
+        help2.setStyleSheet('color: gray')
+        l_open.addWidget(help2)
         self.opener_status = QLabel('')
-        box.addWidget(self.opener_status)
+        l_open.addWidget(self.opener_status)
         row = QHBoxLayout()
-        for text, fn in ((t('install_entry'), self.install_entry), (t('make_default'), self.make_default),
-                         (t('restore_default'), self.restore_default)):
-            b = QPushButton(text)
+        for text, icon_name, fn in ((t('install_entry'), 'list-add', self.install_entry),
+                                    (t('make_default'), 'emblem-default', self.make_default),
+                                    (t('restore_default'), 'edit-undo', self.restore_default)):
+            b = QPushButton(QIcon.fromTheme(icon_name), text)
             b.clicked.connect(fn)
             row.addWidget(b)
-        box.addLayout(row)
+        l_open.addLayout(row)
+        box.addWidget(g_open)
         box.addStretch(1)
         self.refresh_browser_tab()
         return page
@@ -807,18 +881,12 @@ class SettingsWindow(QWidget):
 
     # --- About -----------------------------------------------------------------------------------------------
     def about_tab(self):
-        page = QWidget()
-        box = QVBoxLayout(page)
-        box.addWidget(QLabel('<b>URL Trackbye ' + tb.VERSION + '</b>'))
-        text = QLabel(t('about') + '\n' + tb.HERE)
+        page, box = self.new_page('URL Trackbye ' + tb.VERSION)
+        text = QLabel(t('about') + '\n\n' + tb.HERE)
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         box.addWidget(text)
-        logs = QTabWidget()
-        logs.addTab(self.test_tab(), t('tab_test'))
-        logs.addTab(self.log_tab(), t('tab_log'))
-        logs.addTab(self.events_tab(), t('tab_events'))
-        box.addWidget(logs, 1)
+        box.addStretch(1)
         return page
 
 
