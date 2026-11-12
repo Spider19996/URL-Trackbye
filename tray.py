@@ -10,7 +10,7 @@ import time
 
 from PyQt6.QtCore import QLocale, QProcess, QTimer, QUrl, Qt
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-from PyQt6.QtGui import QAction, QDesktopServices, QIcon, QPainter, QPalette, QPixmap
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
                              QPlainTextEdit, QPushButton, QSystemTrayIcon, QTableWidget, QTableWidgetItem, QTabWidget,
                              QVBoxLayout, QWidget)
@@ -88,6 +88,18 @@ TEXT = {
     'src_browser-copy': ('Browser (copy)', 'Browser (Kopie)'),
     'log_copy': ('Copy cleaned link', 'Gesäuberten Link kopieren'),
     'log_clear': ('Clear log', 'Protokoll leeren'),
+    'tab_events': ('Messages', 'Meldungen'),
+    'events_help': ('What the app did and what went wrong. Send this when you report a problem.',
+                    'Was die App getan hat und was schiefging. Bei Problemen bitte mitschicken.'),
+    'only_problems': ('Only warnings and errors', 'Nur Warnungen und Fehler'),
+    'col_level': ('Level', 'Stufe'),
+    'col_message': ('Message', 'Meldung'),
+    'lvl_info': ('Info', 'Info'),
+    'lvl_warning': ('Warning', 'Warnung'),
+    'lvl_error': ('Error', 'Fehler'),
+    'events_clear': ('Clear messages', 'Meldungen leeren'),
+    'events_copy': ('Copy all', 'Alle kopieren'),
+    'problem': ('URL Trackbye: problem', 'URL Trackbye: Problem'),
     'show_builtin': ('Show built-in rules', 'Eingebaute Regeln anzeigen'),
 }
 LANG = 1 if QLocale.system().name().startswith('de') else 0
@@ -125,11 +137,15 @@ class ClipboardService:
 
     def start(self):
         self.wanted = True
-        if self.proc is not None or not self.available():
+        if not self.available():
+            tb.diag('warning', 'wl-clipboard (wl-paste, wl-copy) is not installed: copied links cannot be cleaned')
+            return
+        if self.proc is not None:
             return
         self.proc = QProcess()
         self.proc.finished.connect(self._finished)
         self.proc.start('wl-paste', ['--type', 'text', '--watch', sys.executable, tb.SCRIPT, 'filter-clip'])
+        tb.diag('info', 'Clipboard cleaning started')
 
     def stop(self):
         self.wanted = False
@@ -139,10 +155,13 @@ class ClipboardService:
             proc.finished.disconnect()
             proc.terminate()
             proc.waitForFinished(1000)
+            tb.diag('info', 'Clipboard cleaning stopped')
 
-    def _finished(self):
-        self.proc = None
+    def _finished(self, code=0, status=None):
+        proc, self.proc = self.proc, None
         if self.wanted:
+            err = bytes(proc.readAllStandardError()).decode('utf-8', 'replace').strip() if proc is not None else ''
+            tb.diag('error', 'The clipboard watcher stopped (exit %s)%s; restarting in 3 seconds' % (code, ': ' + err if err else ''))
             self.timer.start(3000)
 
     def sync(self, on):
@@ -164,6 +183,7 @@ class SettingsWindow(QWidget):
         tabs.addTab(self.general_tab(), t('tab_general'))
         tabs.addTab(self.rules_tab(), t('tab_rules'))
         tabs.addTab(self.log_tab(), t('tab_log'))
+        tabs.addTab(self.events_tab(), t('tab_events'))
         tabs.addTab(self.browser_tab(), t('tab_browser'))
         tabs.addTab(self.about_tab(), t('tab_about'))
         layout = QVBoxLayout(self)
@@ -331,6 +351,7 @@ class SettingsWindow(QWidget):
         self.log_signature = None
         self.log_timer = QTimer(self)
         self.log_timer.timeout.connect(self.refresh_log)
+        self.log_timer.timeout.connect(lambda: self.refresh_events())
         self.refresh_log()
         return page
 
@@ -372,6 +393,76 @@ class SettingsWindow(QWidget):
         self.log_timer.stop()
         super().hideEvent(event)
 
+    # --- Messages --------------------------------------------------------------------------------------------
+    def events_tab(self):
+        page = QWidget()
+        box = QVBoxLayout(page)
+        help_label = QLabel(t('events_help'))
+        help_label.setWordWrap(True)
+        box.addWidget(help_label)
+        self.only_problems = QCheckBox(t('only_problems'))
+        self.only_problems.toggled.connect(lambda _: self.refresh_events(True))
+        box.addWidget(self.only_problems)
+        self.ev_table = QTableWidget(0, 3)
+        self.ev_table.setHorizontalHeaderLabels([t('col_time'), t('col_level'), t('col_message')])
+        self.ev_table.horizontalHeader().setStretchLastSection(True)
+        self.ev_table.setColumnWidth(0, 120)
+        self.ev_table.setColumnWidth(1, 80)
+        self.ev_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.ev_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.ev_table.verticalHeader().setVisible(False)
+        box.addWidget(self.ev_table)
+        row = QHBoxLayout()
+        copy = QPushButton(t('events_copy'))
+        copy.clicked.connect(self.copy_events)
+        clear = QPushButton(t('events_clear'))
+        clear.clicked.connect(self.clear_events)
+        row.addWidget(copy)
+        row.addStretch(1)
+        row.addWidget(clear)
+        box.addLayout(row)
+        self.ev_signature = None
+        self.refresh_events(True)
+        return page
+
+    def shown_events(self):
+        entries = list(reversed(tb.read_events()))
+        if self.only_problems.isChecked():
+            entries = [e for e in entries if e.get('level') in ('warning', 'error')]
+        return entries[:300]
+
+    def refresh_events(self, force=False):
+        try:
+            st = os.stat(tb.EVENTS_PATH)
+            signature = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            signature = None
+        if signature == self.ev_signature and not force:
+            return
+        self.ev_signature = signature
+        entries = self.shown_events()
+        self.ev_table.setRowCount(len(entries))
+        colors = {'warning': QColor('#b9770e'), 'error': QColor('#c0392b')}
+        for i, e in enumerate(entries):
+            level = e.get('level', 'info')
+            message = e.get('msg', '') + (' (x%d)' % e['count'] if e.get('count', 1) > 1 else '')
+            cells = [time.strftime('%d.%m. %H:%M:%S', time.localtime(e.get('t', 0))), t('lvl_' + level) if 'lvl_' + level in TEXT else level, message]
+            for c, text in enumerate(cells):
+                item = QTableWidgetItem(text)
+                item.setToolTip(e.get('where') or e.get('msg', ''))
+                if level in colors:
+                    item.setForeground(colors[level])
+                self.ev_table.setItem(i, c, item)
+
+    def copy_events(self):
+        lines = ['%s [%s] %s' % (time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(e.get('t', 0))), e.get('level', ''),
+                                  e.get('msg', '')) for e in reversed(self.shown_events())]
+        QApplication.clipboard().setText('URL Trackbye ' + tb.VERSION + '\n' + '\n'.join(lines))
+
+    def clear_events(self):
+        tb.clear_events()
+        self.refresh_events(True)
+
     # --- Browser ---------------------------------------------------------------------------------------------
     def browser_tab(self):
         page = QWidget()
@@ -393,6 +484,9 @@ class SettingsWindow(QWidget):
         self.native.setHorizontalHeaderLabels([t('col_browser'), t('col_found'), t('col_reg')])
         self.native.horizontalHeader().setStretchLastSection(True)
         self.native.setMaximumHeight(170)
+        self.native.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.native.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.native.verticalHeader().setVisible(False)
         box.addWidget(self.native)
         self.native_buttons = []
         for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
@@ -434,7 +528,8 @@ class SettingsWindow(QWidget):
         self.opener_status.setText(t('opener_status', d=tb.default_browser() or '?'))
 
     def register_native(self):
-        tb.install_native()
+        written = tb.install_native()
+        tb.diag('info', 'Registered the browser extension link for: ' + (', '.join(written) or 'no browser found'))
         self.refresh_browser_tab()
 
     def install_entry(self):
@@ -445,6 +540,7 @@ class SettingsWindow(QWidget):
         if QMessageBox.question(self, t('title'), t('confirm_default')) != QMessageBox.StandardButton.Yes:
             return
         tb.install_handler()
+        tb.diag('info', 'URL Trackbye set as default browser')
         cfg = tb.load_config()
         current = tb.default_browser()
         if current and current != 'trackbye.desktop':
@@ -457,6 +553,9 @@ class SettingsWindow(QWidget):
         previous = tb.load_config().get('previous_default')
         if previous:
             tb.set_default_browser(previous)
+            tb.diag('info', 'Default browser restored to ' + previous)
+        else:
+            tb.diag('warning', 'No previous default browser is known; pick one in the system settings')
         self.refresh_browser_tab()
 
     # --- About -----------------------------------------------------------------------------------------------
@@ -520,6 +619,11 @@ class TrayApp:
         self.act_clip.setChecked(on)
         self.act_clip.blockSignals(False)
         self.apply(on)
+        tb.diag('info', 'URL Trackbye %s started' % tb.VERSION)
+        self.seen = max([e.get('t', 0) for e in tb.read_events()] or [0])
+        self.notice_timer = QTimer()
+        self.notice_timer.timeout.connect(self.check_problems)
+        self.notice_timer.start(3000)
         show_tray = tb.load_config()['tray_icon'] and QSystemTrayIcon.isSystemTrayAvailable()
         self.tray.setVisible(show_tray)
         if not show_tray or not os.path.exists(os.path.join(tb.CONFIG_DIR, 'config.json')):
@@ -545,6 +649,15 @@ class TrayApp:
             self.window.chk_clip.setChecked(on)
             self.window.chk_clip.blockSignals(False)
 
+    def check_problems(self):
+        """Show a tray notice for errors that appeared since the last check (also from the browser helper)."""
+        fresh = [e for e in tb.read_events() if e.get('t', 0) > self.seen]
+        if fresh:
+            self.seen = max(e['t'] for e in fresh)
+            errors = [e for e in fresh if e.get('level') == 'error']
+            if errors and self.tray.isVisible():
+                self.tray.showMessage(t('problem'), errors[-1].get('msg', ''), QSystemTrayIcon.MessageIcon.Critical, 8000)
+
     def set_tray_visible(self, on):
         cfg = tb.load_config()
         cfg['tray_icon'] = bool(on)
@@ -568,6 +681,7 @@ class TrayApp:
             self.show_settings()
 
     def quit(self):
+        tb.diag('info', 'URL Trackbye quit')
         self.service.stop()
         self.tray.hide()
         self.qapp.quit()

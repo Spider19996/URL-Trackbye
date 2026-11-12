@@ -21,6 +21,7 @@ import struct
 import subprocess
 import sys
 import time
+import traceback
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 CONFIG_DIR = os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'trackbye')
@@ -30,28 +31,34 @@ EXTENSION_ID = 'kcppbmmghccgpmjafccjammekemegidd'
 STATE_DIR = os.path.join(os.environ.get('XDG_STATE_HOME', os.path.expanduser('~/.local/state')), 'trackbye')
 LOG_PATH = os.path.join(STATE_DIR, 'log.jsonl')
 LOG_MAX = 500
+EVENTS_PATH = os.path.join(STATE_DIR, 'events.jsonl')
+EVENTS_MAX = 300
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
                   'log': True, 'tray_icon': True}
 SCRIPT = os.path.realpath(__file__)
-VERSION = '0.3.0'
+VERSION = '0.4.0'
 
 
 # --------------------------------------------------------------------------------------------------------------
 # Rules and cleaning
 # --------------------------------------------------------------------------------------------------------------
 
-def read_json(path, fallback):
+def read_json(path, fallback, report=False):
     try:
         with open(path, encoding='utf-8') as f:
             return json.load(f)
-    except (OSError, ValueError):
+    except OSError:
+        return fallback
+    except ValueError as e:
+        if report:
+            diag('warning', 'Ignoring %s (invalid JSON: %s)' % (path, e))
         return fallback
 
 
 def load_rules():
     """Built-in rules plus the user's additions (union of lists, user sites appended)."""
-    rules = read_json(os.path.join(HERE, 'rules.json'), {})
-    user = read_json(os.path.join(CONFIG_DIR, 'rules.json'), {})
+    rules = read_json(os.path.join(HERE, 'rules.json'), {}, True)
+    user = read_json(os.path.join(CONFIG_DIR, 'rules.json'), {}, True)
     return {
         'version': rules.get('version', 1),
         'exclude_hosts': list(rules.get('exclude_hosts', [])) + list(user.get('exclude_hosts', [])),
@@ -188,6 +195,53 @@ def log_event(source, before, after):
 
 
 # --------------------------------------------------------------------------------------------------------------
+# Messages: what the app did and what went wrong (levels: info, warning, error)
+# --------------------------------------------------------------------------------------------------------------
+
+def read_events():
+    entries = []
+    try:
+        with open(EVENTS_PATH, encoding='utf-8') as f:
+            for line in f:
+                try:
+                    entries.append(json.loads(line))
+                except ValueError:
+                    pass
+    except OSError:
+        pass
+    return entries
+
+
+def write_events(entries):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = EVENTS_PATH + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        for e in entries[-EVENTS_MAX:]:
+            f.write(json.dumps(e, ensure_ascii=False) + '\n')
+    os.replace(tmp, EVENTS_PATH)
+
+
+def diag(level, message, where=''):
+    """Record a message. The same message within a minute is only counted, so a repeating problem does not flood it."""
+    try:
+        now = time.time()
+        entries = read_events()
+        last = entries[-1] if entries else None
+        if last and last.get('msg') == message and last.get('level') == level and now - last.get('t', 0) < 60:
+            last['count'] = last.get('count', 1) + 1
+            last['t'] = now
+        else:
+            entries.append({'t': now, 'level': level, 'msg': message, 'where': where, 'count': 1})
+        write_events(entries)
+    except OSError:
+        pass  # the log must never break the program
+
+
+def clear_events():
+    write_events([])
+
+
+# --------------------------------------------------------------------------------------------------------------
 # Commands
 # --------------------------------------------------------------------------------------------------------------
 
@@ -215,7 +269,12 @@ def cmd_filter_clip():
         return
     cleaned = clean_url(text, load_rules())
     if cleaned != text.strip():
-        subprocess.run(['wl-copy', '--type', 'text/plain'], input=cleaned.encode('utf-8'), check=False)
+        result = subprocess.run(['wl-copy', '--type', 'text/plain'], input=cleaned.encode('utf-8'), capture_output=True,
+                                check=False)
+        if result.returncode != 0:
+            diag('error', 'wl-copy failed (exit %d): %s' % (result.returncode, result.stderr.decode('utf-8', 'replace').strip()),
+                 'clipboard')
+            return
         log_event('clipboard', text.strip(), cleaned)
         notify('Cleaned the copied link')
 
@@ -386,6 +445,26 @@ def cmd_native():
 
 
 def main(argv):
+    cmd = argv[1] if len(argv) > 1 else 'tray'
+    try:
+        return run(argv)
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except Exception as e:  # noqa: BLE001 - last resort: record it instead of failing silently
+        diag('error', '%s failed: %s: %s' % (cmd if not cmd.startswith('chrome-extension') else 'native host',
+                                             type(e).__name__, e), ''.join(traceback.format_exception_only(type(e), e)).strip())
+        if cmd == 'open':  # the link must still open, even if cleaning broke
+            try:
+                os.execvp(load_config()['browser'], [load_config()['browser']] + argv[2:])
+            except OSError as e2:
+                diag('error', 'Could not start the browser "%s": %s' % (load_config()['browser'], e2))
+        if cmd == 'filter-clip':
+            return 0
+        print('trackbye: ' + str(e), file=sys.stderr)
+        return 1
+
+
+def run(argv):
     # The browser starts a native host with the extension origin as its only argument.
     if len(argv) > 1 and argv[1].startswith('chrome-extension://'):
         return cmd_native()

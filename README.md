@@ -22,6 +22,9 @@ clipboard in the background and has one settings window for everything:
 - clipboard cleaning on/off, notifications, **start with the desktop session**, hide the tray symbol
 - **log** of cleaned links (clipboard, links opened by other apps, browser), with what was removed; stored only on this
   computer in `~/.local/state/trackbye/log.jsonl` (500 entries), can be switched off and cleared
+- **messages** (what the app did, warnings and errors such as a missing `wl-clipboard`, a broken rules file or a
+  crashed clipboard watcher; errors also show as a tray notice) in `~/.local/state/trackbye/events.jsonl`; if cleaning
+  itself fails when you open a link, the link still opens unchanged
 - your own rules, with a live "try a link" box
 - browser setup: extension folder, sharing the rules with the extension, default browser for links from other apps
 
