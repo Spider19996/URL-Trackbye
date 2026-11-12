@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "_comment": "Exact parameter names only (no wildcards), so the program and the browser extension behave identically. Hosts match the domain and all its subdomains.",
+  "exclude_hosts": [
+    "accounts.google.com",
+    "login.microsoftonline.com",
+    "paypal.com",
+    "stripe.com"
+  ],
+  "global_remove": [
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "utm_id",
+    "utm_name",
+    "utm_creative_format",
+    "utm_marketing_tactic",
+    "utm_source_platform",
+    "utm_brand",
+    "fbclid",
+    "gclid",
+    "gclsrc",
+    "dclid",
+    "gbraid",
+    "wbraid",
+    "msclkid",
+    "yclid",
+    "twclid",
+    "ttclid",
+    "mc_cid",
+    "mc_eid",
+    "igshid",
+    "_ga",
+    "_gl",
+    "_hsenc",
+    "_hsmi",
+    "mkt_tok",
+    "vero_id",
+    "oly_enc_id",
+    "oly_anon_id",
+    "wickedid",
+    "ref_src",
+    "ref_url"
+  ],
+  "sites": [
+    {
+      "name": "Google Search",
+      "hosts": [
+        "google.com",
+        "google.de",
+        "google.at",
+        "google.ch",
+        "google.co.uk",
+        "google.fr",
+        "google.es",
+        "google.it",
+        "google.nl",
+        "google.pl",
+        "google.ca",
+        "google.com.au"
+      ],
+      "remove": [
+        "sca_esv",
+        "sca_upv",
+        "sxsrf",
+        "ei",
+        "biw",
+        "bih",
+        "uact",
+        "oq",
+        "gs_lp",
+        "gs_lcrp",
+        "gs_l",
+        "sclient",
+        "ved",
+        "source",
+        "sourceid",
+        "client",
+        "rlz",
+        "aqs",
+        "gs_ssp",
+        "iflsig",
+        "gs_gbg"
+      ]
+    },
+    {
+      "name": "YouTube",
+      "hosts": [
+        "youtube.com",
+        "youtu.be",
+        "youtube-nocookie.com"
+      ],
+      "remove": [
+        "si",
+        "feature",
+        "pp",
+        "ab_channel",
+        "kw",
+        "embeds_referring_euri",
+        "source_ve_path"
+      ]
+    },
+    {
+      "name": "Spotify",
+      "hosts": [
+        "spotify.com",
+        "spotify.link"
+      ],
+      "remove": [
+        "si",
+        "nd",
+        "dlsi",
+        "go"
+      ]
+    },
+    {
+      "name": "Amazon",
+      "hosts": [
+        "amazon.com",
+        "amazon.de",
+        "amazon.co.uk",
+        "amazon.fr",
+        "amazon.it",
+        "amazon.es",
+        "amazon.nl"
+      ],
+      "remove": [
+        "tag",
+        "ref",
+        "ref_",
+        "pd_rd_r",
+        "pd_rd_w",
+        "pd_rd_wg",
+        "pf_rd_r",
+        "pf_rd_p",
+        "pf_rd_s",
+        "pf_rd_t",
+        "pf_rd_i",
+        "pf_rd_m",
+        "qid",
+        "sr",
+        "crid",
+        "sprefix",
+        "linkCode",
+        "linkId",
+        "content-id"
+      ]
+    },
+    {
+      "name": "X / Twitter",
+      "hosts": [
+        "twitter.com",
+        "x.com"
+      ],
+      "remove": [
+        "s",
+        "t",
+        "ref_src",
+        "ref_url"
+      ]
+    },
+    {
+      "name": "Instagram and Facebook",
+      "hosts": [
+        "instagram.com",
+        "facebook.com",
+        "fb.com"
+      ],
+      "remove": [
+        "igsh",
+        "igshid",
+        "mibextid",
+        "__cft__",
+        "__tn__",
+        "fbclid",
+        "sfnsn",
+        "rdid"
+      ]
+    },
+    {
+      "name": "TikTok",
+      "hosts": [
+        "tiktok.com"
+      ],
+      "remove": [
+        "_t",
+        "_r",
+        "is_from_webapp",
+        "sender_device",
+        "sender_web_id",
+        "share_app_id",
+        "share_link_id",
+        "refer"
+      ]
+    },
+    {
+      "name": "Reddit",
+      "hosts": [
+        "reddit.com",
+        "redd.it"
+      ],
+      "remove": [
+        "share_id",
+        "ref",
+        "ref_source",
+        "rdt"
+      ]
+    },
+    {
+      "name": "LinkedIn",
+      "hosts": [
+        "linkedin.com"
+      ],
+      "remove": [
+        "trackingId",
+        "trk",
+        "trkInfo",
+        "lipi",
+        "midToken",
+        "midSig"
+      ]
+    }
+  ]
+}
