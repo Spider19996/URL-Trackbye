@@ -25,6 +25,10 @@ clipboard in the background and has one settings window for everything:
 - **messages** (what the app did, warnings and errors such as a missing `wl-clipboard`, a broken rules file or a
   crashed clipboard watcher; errors also show as a tray notice) in `~/.local/state/trackbye/events.jsonl`; if cleaning
   itself fails when you open a link, the link still opens unchanged
+- **extension check**: the extension tells the app which version it runs (needs the rule sharing from the Browser tab).
+  After an update, if the browser still runs an older extension than the files on disk, you get a notice (once per
+  version), a warning in the messages and a hint in the Browser tab; the extension also reloads itself within about
+  30 minutes
 - your own rules, with a live "try a link" box
 - browser setup: extension folder, sharing the rules with the extension, default browser for links from other apps
 

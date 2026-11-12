@@ -100,6 +100,14 @@ TEXT = {
     'events_clear': ('Clear messages', 'Meldungen leeren'),
     'events_copy': ('Copy all', 'Alle kopieren'),
     'problem': ('URL Trackbye: problem', 'URL Trackbye: Problem'),
+    'ext_ok': ('Extension: up to date ({v})', 'Erweiterung: aktuell ({v})'),
+    'ext_old': ('Extension is outdated: the browser runs {r}, available is {a}. Reload it on the extensions page (it also reloads itself within about 30 minutes).',
+                'Erweiterung veraltet: Der Browser nutzt {r}, verfügbar ist {a}. Auf der Erweiterungsseite neu laden (sie lädt sich auch selbst innerhalb von etwa 30 Minuten neu).'),
+    'ext_unknown': ('Extension: no contact yet (not loaded, or the rule sharing below is not set up)',
+                    'Erweiterung: noch kein Kontakt (nicht geladen oder die Regel-Anbindung unten nicht eingerichtet)'),
+    'ext_older': ('an older version', 'eine ältere Version'),
+    'ext_page': ('Open the extensions page', 'Erweiterungsseite öffnen'),
+    'ext_notice_title': ('URL Trackbye: update the extension', 'URL Trackbye: Erweiterung aktualisieren'),
     'show_builtin': ('Show built-in rules', 'Eingebaute Regeln anzeigen'),
 }
 LANG = 1 if QLocale.system().name().startswith('de') else 0
@@ -475,7 +483,16 @@ class SettingsWindow(QWidget):
         box.addWidget(help_label)
         open_btn = QPushButton(t('open_folder'))
         open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(ext)))
-        box.addWidget(open_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        row_ext = QHBoxLayout()
+        row_ext.addWidget(open_btn)
+        page_btn = QPushButton(t('ext_page'))
+        page_btn.clicked.connect(self.open_extensions_page)
+        row_ext.addWidget(page_btn)
+        row_ext.addStretch(1)
+        box.addLayout(row_ext)
+        self.ext_status = QLabel('')
+        self.ext_status.setWordWrap(True)
+        box.addWidget(self.ext_status)
 
         box.addWidget(self.heading(t('native_head')))
         self.native = QTableWidget(len(tb.NATIVE_BROWSERS), 3)
@@ -517,7 +534,26 @@ class SettingsWindow(QWidget):
         label = QLabel('<b>' + text + '</b>')
         return label
 
+    def open_extensions_page(self):
+        browser = tb.load_config()['browser']
+        scheme = 'vivaldi' if 'vivaldi' in browser else 'chrome'
+        QProcess.startDetached(browser, [scheme + '://extensions'])
+
+    def refresh_ext_status(self):
+        state = tb.read_json(tb.EXTENSION_STATE, {})
+        outdated = tb.extension_outdated()
+        if outdated:
+            self.ext_status.setText(t('ext_old', r=outdated[0] or t('ext_older'), a=outdated[1]))
+            self.ext_status.setStyleSheet('color: #c0392b')
+        elif state:
+            self.ext_status.setText(t('ext_ok', v=state.get('version') or '?'))
+            self.ext_status.setStyleSheet('')
+        else:
+            self.ext_status.setText(t('ext_unknown'))
+            self.ext_status.setStyleSheet('')
+
     def refresh_browser_tab(self):
+        self.refresh_ext_status()
         for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
             found = os.path.isdir(os.path.expanduser('~/.config/' + folder))
             registered = os.path.exists(tb.native_manifest_path(folder))
@@ -622,6 +658,8 @@ class TrayApp:
         self.seen = max([e.get('t', 0) for e in tb.read_events()] or [0])
         self.notice_timer = QTimer()
         self.notice_timer.timeout.connect(self.check_problems)
+        self.notice_timer.timeout.connect(self.check_extension)
+        QTimer.singleShot(15000, self.check_extension)
         self.notice_timer.start(3000)
         show_tray = tb.load_config()['tray_icon'] and QSystemTrayIcon.isSystemTrayAvailable()
         self.tray.setVisible(show_tray)
@@ -647,6 +685,23 @@ class TrayApp:
             self.window.chk_clip.blockSignals(True)
             self.window.chk_clip.setChecked(on)
             self.window.chk_clip.blockSignals(False)
+
+    def check_extension(self):
+        """Tell the user once per available version when the browser still runs an older extension."""
+        outdated = tb.extension_outdated()
+        if not outdated:
+            return
+        state = tb.read_json(tb.EXTENSION_STATE, {})
+        if state.get('notified_for') == outdated[1]:
+            return
+        state['notified_for'] = outdated[1]
+        tb.write_json(tb.EXTENSION_STATE, state)
+        message = t('ext_old', r=outdated[0] or t('ext_older'), a=outdated[1])
+        tb.diag('warning', message)
+        if self.tray.isVisible():
+            self.tray.showMessage(t('ext_notice_title'), message, QSystemTrayIcon.MessageIcon.Warning, 12000)
+        elif shutil.which('notify-send'):
+            QProcess.startDetached('notify-send', ['-a', 'URL Trackbye', t('ext_notice_title'), message])
 
     def check_problems(self):
         """Show a tray notice for errors that appeared since the last check (also from the browser helper)."""

@@ -1,6 +1,7 @@
 import { cleanUrl } from './cleaner.js';
 
 const HOST = 'de.trackbye.host';
+const VERSION = chrome.runtime.getManifest().version; // reported to the program, which warns when it is outdated
 const DEFAULT_SETTINGS = { enabled: true, disabledSites: [] };
 
 async function getSettings() {
@@ -10,7 +11,7 @@ async function getSettings() {
 // Rules from the trackbye program if it is installed (they include your own additions), else the bundled copy.
 async function loadRules() {
   try {
-    const reply = await chrome.runtime.sendNativeMessage(HOST, { type: 'rules' });
+    const reply = await chrome.runtime.sendNativeMessage(HOST, { type: 'rules', ext: VERSION });
     if (reply && reply.ok && reply.rules) return { rules: reply.rules, source: 'program' };
   } catch (e) { /* program not installed: use the bundled rules */ }
   const bundled = await (await fetch(chrome.runtime.getURL('rules.json'))).json();
@@ -63,7 +64,7 @@ async function applyRules() {
 // Tell the program which links the browser cleaned, so they show up in its log. Only an unpacked extension gets these
 // match events; for the program the cleaning is simply repeated on the original address.
 function reportToLog(source, url) {
-  chrome.runtime.sendNativeMessage(HOST, { type: 'log', source, url }).catch(() => {});
+  chrome.runtime.sendNativeMessage(HOST, { type: 'log', source, url, ext: VERSION }).catch(() => {});
 }
 if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
   chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
@@ -105,7 +106,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // it (the files on disk) has a newer version. For an unpacked extension, reload() re-reads the files from disk.
 async function checkForUpdate() {
   try {
-    const reply = await chrome.runtime.sendNativeMessage(HOST, { type: 'version' });
+    const reply = await chrome.runtime.sendNativeMessage(HOST, { type: 'version', ext: VERSION });
     if (reply && reply.ok && reply.version && reply.version !== chrome.runtime.getManifest().version) {
       chrome.runtime.reload();
     }

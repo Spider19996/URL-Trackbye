@@ -33,10 +33,11 @@ LOG_PATH = os.path.join(STATE_DIR, 'log.jsonl')
 LOG_MAX = 500
 EVENTS_PATH = os.path.join(STATE_DIR, 'events.jsonl')
 EVENTS_MAX = 300
+EXTENSION_STATE = os.path.join(STATE_DIR, 'extension.json')
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
                   'log': True, 'tray_icon': True}
 SCRIPT = os.path.realpath(__file__)
-VERSION = '0.4.0'
+VERSION = '0.5.0'
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -397,6 +398,25 @@ def install_launcher():
                 '\nCategories=Network;Utility;\n')
 
 
+def note_extension(msg):
+    """The extension names its running version in every message; remember it (and when we last heard from it)."""
+    state = read_json(EXTENSION_STATE, {})
+    state['version'] = msg.get('ext')  # None: an older extension that does not report it
+    state['seen'] = time.time()
+    write_json(EXTENSION_STATE, state)
+
+
+def extension_outdated(max_age=3 * 86400):
+    """(running, available) if the browser runs an older extension than the files on disk, else None.
+    Only counts if the extension was heard from recently (otherwise it is probably not installed any more)."""
+    state = read_json(EXTENSION_STATE, {})
+    available = extension_version()
+    if not state or not available or time.time() - state.get('seen', 0) > max_age:
+        return None
+    running = state.get('version')
+    return None if running == available else (running or '', available)
+
+
 def extension_version():
     return read_json(os.path.join(HERE, 'extension', 'manifest.json'), {}).get('version', '')
 
@@ -430,6 +450,7 @@ def cmd_native():
         if msg is None:
             return
         kind = msg.get('type')
+        note_extension(msg)
         if kind == 'rules':
             send_message({'ok': True, 'rules': load_rules()})
         elif kind == 'log':

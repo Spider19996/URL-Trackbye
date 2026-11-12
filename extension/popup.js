@@ -32,7 +32,7 @@ async function main() {
     if (!tab || !tab.url) { $('msg').textContent = t.nothing; return; }
     const rules = await (await fetch(chrome.runtime.getURL('rules.json'))).json();
     let program = null;
-    try { const r = await chrome.runtime.sendNativeMessage('de.trackbye.host', { type: 'rules' }); if (r && r.ok) program = r.rules; } catch (e) { /* none */ }
+    try { const r = await chrome.runtime.sendNativeMessage('de.trackbye.host', { type: 'rules', ext: chrome.runtime.getManifest().version }); if (r && r.ok) program = r.rules; } catch (e) { /* none */ }
     await navigator.clipboard.writeText(cleanUrl(tab.url, program || rules));
     $('msg').textContent = t.copied;
   });
