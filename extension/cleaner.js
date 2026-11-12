@@ -1,4 +1,4 @@
-// The same cleaning logic as linkwash.py (kept in sync by tests/test_parity.js).
+// The same cleaning logic as linkfeger.py (kept in sync by tests/test_parity.js).
 
 export function hostMatches(host, domains) {
   return domains.some((d) => host === d || host.endsWith('.' + d));

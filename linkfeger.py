@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""linkwash - remove tracking parameters from links, system-wide.
+"""linkfeger - remove tracking parameters from links, system-wide.
 
 One small program with several jobs that all use the same rules (rules.json):
 
-  linkwash clean URL...      print the cleaned URLs
-  linkwash watch             watch the clipboard (Wayland, needs wl-clipboard) and clean copied URLs
-  linkwash open [URL...]     clean the URLs and open them in the real browser (use as default browser)
-  linkwash install-handler   write the desktop entry that makes `open` selectable as default browser
-  linkwash install-native    register the native messaging host for the browser extension
-  linkwash native            native messaging host (started by the browser extension, not by you)
+  linkfeger clean URL...      print the cleaned URLs
+  linkfeger watch             watch the clipboard (Wayland, needs wl-clipboard) and clean copied URLs
+  linkfeger open [URL...]     clean the URLs and open them in the real browser (use as default browser)
+  linkfeger install-handler   write the desktop entry that makes `open` selectable as default browser
+  linkfeger install-native    register the native messaging host for the browser extension
+  linkfeger native            native messaging host (started by the browser extension, not by you)
 
 Only the Python standard library is used. Rules: exact parameter names, matched per site (domain and subdomains).
-Your own additions go into ~/.config/linkwash/rules.json (same format, merged with the built-in rules).
+Your own additions go into ~/.config/linkfeger/rules.json (same format, merged with the built-in rules).
 """
 import json
 import os
@@ -21,8 +21,8 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-CONFIG_DIR = os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'linkwash')
-HOST_NAME = 'de.linkwash.host'
+CONFIG_DIR = os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'linkfeger')
+HOST_NAME = 'de.linkfeger.host'
 # Fixed by the "key" in extension/manifest.json, so the host manifest can name exactly this extension.
 EXTENSION_ID = 'kcppbmmghccgpmjafccjammekemegidd'
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False}
@@ -99,7 +99,7 @@ def clean_url(url, rules):
 
 def notify(text):
     if load_config().get('notify') and shutil.which('notify-send'):
-        subprocess.run(['notify-send', '-a', 'linkwash', 'linkwash', text], check=False)
+        subprocess.run(['notify-send', '-a', 'linkfeger', 'linkfeger', text], check=False)
 
 
 def cmd_clean(args):
@@ -127,7 +127,7 @@ def cmd_filter_clip():
 
 def cmd_watch():
     if not shutil.which('wl-paste') or not shutil.which('wl-copy'):
-        sys.exit('linkwash watch needs wl-clipboard (wl-paste and wl-copy) on Wayland.')
+        sys.exit('linkfeger watch needs wl-clipboard (wl-paste and wl-copy) on Wayland.')
     cmd = ['wl-paste', '--type', 'text', '--watch', sys.executable, os.path.realpath(__file__), 'filter-clip']
     try:
         subprocess.run(cmd, check=False)
@@ -137,23 +137,23 @@ def cmd_watch():
 
 def cmd_open(args):
     browser = load_config()['browser']
-    if os.path.basename(shutil.which(browser) or browser) in ('linkwash', 'linkwash.py'):
-        sys.exit('The "browser" setting must name the real browser, not linkwash.')
+    if os.path.basename(shutil.which(browser) or browser) in ('linkfeger', 'linkfeger.py'):
+        sys.exit('The "browser" setting must name the real browser, not linkfeger.')
     rules = load_rules()
     os.execvp(browser, [browser] + [clean_url(a, rules) for a in args])
 
 
 def cmd_install_handler(args):
-    path = os.path.join(os.path.expanduser('~/.local/share/applications'), 'linkwash.desktop')
+    path = os.path.join(os.path.expanduser('~/.local/share/applications'), 'linkfeger.desktop')
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
-        f.write('[Desktop Entry]\nType=Application\nName=linkwash (clean links, then open browser)\n'
+        f.write('[Desktop Entry]\nType=Application\nName=linkfeger (clean links, then open browser)\n'
                 'Exec=' + os.path.realpath(__file__) + ' open %U\nTerminal=false\n'
                 'Categories=Network;WebBrowser;\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\n')
     print('Wrote ' + path)
     if '--set-default' in args:
-        subprocess.run(['xdg-settings', 'set', 'default-web-browser', 'linkwash.desktop'], check=False)
-        print('Default browser set to linkwash. Undo: xdg-settings set default-web-browser <browser>.desktop')
+        subprocess.run(['xdg-settings', 'set', 'default-web-browser', 'linkfeger.desktop'], check=False)
+        print('Default browser set to linkfeger. Undo: xdg-settings set default-web-browser <browser>.desktop')
     else:
         print('To use it as default browser, run again with --set-default or pick it in the system settings.')
 
@@ -161,7 +161,7 @@ def cmd_install_handler(args):
 def cmd_install_native():
     manifest = {
         'name': HOST_NAME,
-        'description': 'linkwash: shares the cleaning rules with the browser extension',
+        'description': 'linkfeger: shares the cleaning rules with the browser extension',
         'path': os.path.realpath(__file__),
         'type': 'stdio',
         'allowed_origins': ['chrome-extension://' + EXTENSION_ID + '/'],

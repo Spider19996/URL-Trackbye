@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "linkwash",
+  "name": "linkfeger",
   "version": "0.1.0",
-  "description": "Removes tracking parameters from links before the page loads. Shares its rules with the linkwash program when installed.",
+  "description": "Removes tracking parameters from links before the page loads. Shares its rules with the linkfeger program when installed.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArLVk7TkaOaRM1Irs/Cn0vwoRMObzIYyrfXiI5TSQm+2E4ZwTwksOdexmmzmkd5objaA4ocrEYRxPC0g5lZolAiXVa89RVx9/wi7fZDRczImG+kh+tDx5BOC4Znyy9xcl2qE1/FczIv0HQIwGZ8D9im3/HcXBb2H/1tNpGWFskl8a/mxcl9jEJ9v08hqHSSOjnecpeDv6TbZnDnmSeMdByT0L5JTrnpTA5RyjzEWH/4N3oweUjQnfDE6v1WydQnfj5uD9cpcv0L7fOOIlnnhmCA6xRw/WQPwZguSiXf0GKSDdOWkd5uVvY2ZSNeByhLB2WNWcBkkq3poI6YsDiR5OIwIDAQAB",
   "minimum_chrome_version": "110",
   "permissions": ["declarativeNetRequest", "nativeMessaging", "storage", "contextMenus", "scripting", "activeTab"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_popup": "popup.html", "default_title": "linkwash" },
+  "action": { "default_popup": "popup.html", "default_title": "linkfeger" },
   "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
 }
