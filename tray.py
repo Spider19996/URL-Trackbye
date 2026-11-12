@@ -120,6 +120,17 @@ TEXT = {
     'm_notify': ('Notifications', 'Benachrichtigungen'),
     'm_log': ('Keep log', 'Protokoll führen'),
     'm_autostart': ('Start with the desktop', 'Mit dem Desktop starten'),
+    'example_text': ('Example: a rule for the domain "example.com" that removes "ref" and "source" turns\n'
+                     'https://example.com/page?id=5&ref=newsletter&source=mail   into   https://example.com/page?id=5\n'
+                     'Everything else in the link stays. Rules apply to the domain and all its subdomains.',
+                     'Beispiel: Eine Regel für die Domain "example.com", die "ref" und "source" entfernt, macht aus\n'
+                     'https://example.com/page?id=5&ref=newsletter&source=mail   den Link   https://example.com/page?id=5\n'
+                     'Alles andere im Link bleibt. Regeln gelten für die Domain und alle ihre Unterdomains.'),
+    'insert_example': ('Insert example rule', 'Beispielregel einfügen'),
+    'ph_global': ('e.g. my_tracker (one name per line)', 'z. B. my_tracker (ein Name pro Zeile)'),
+    'ph_excluded': ('e.g. shop.example.org (one domain per line)', 'z. B. shop.example.org (eine Domain pro Zeile)'),
+    'try_hint': ('Changes show here right away; they only apply to real links after you press Save.',
+                 'Änderungen sieht man hier sofort; für echte Links gelten sie erst nach "Speichern".'),
     'show_builtin': ('Show built-in rules', 'Eingebaute Regeln anzeigen'),
 }
 LANG = 1 if QLocale.system().name().startswith('de') else 0
@@ -291,14 +302,20 @@ class SettingsWindow(QWidget):
         box.addWidget(QLabel(t('global')))
         self.ed_global = QPlainTextEdit('\n'.join(rules['global_remove']))
         self.ed_global.setMaximumHeight(80)
+        self.ed_global.setPlaceholderText(t('ph_global'))
         box.addWidget(self.ed_global)
 
         box.addWidget(QLabel(t('excluded')))
         self.ed_excluded = QPlainTextEdit('\n'.join(rules['exclude_hosts']))
         self.ed_excluded.setMaximumHeight(60)
+        self.ed_excluded.setPlaceholderText(t('ph_excluded'))
         box.addWidget(self.ed_excluded)
 
         box.addWidget(QLabel(t('sites')))
+        example = QLabel(t('example_text'))
+        example.setWordWrap(True)
+        example.setStyleSheet('color: gray')
+        box.addWidget(example)
         self.tbl = QTableWidget(0, 2)
         self.tbl.setHorizontalHeaderLabels([t('col_domains'), t('col_params')])
         self.tbl.horizontalHeader().setStretchLastSection(True)
@@ -311,10 +328,12 @@ class SettingsWindow(QWidget):
         add.clicked.connect(lambda: self.add_site_row('', ''))
         delete = QPushButton(t('del_row'))
         delete.clicked.connect(lambda: [self.tbl.removeRow(i.row()) for i in sorted(self.tbl.selectionModel().selectedRows(), key=lambda x: -x.row())])
+        example_btn = QPushButton(t('insert_example'))
+        example_btn.clicked.connect(self.insert_example)
         save = QPushButton(t('save'))
         save.clicked.connect(self.save_rules)
         self.saved_label = QLabel('')
-        for b in (add, delete):
+        for b in (add, delete, example_btn):
             buttons.addWidget(b)
         buttons.addStretch(1)
         buttons.addWidget(self.saved_label)
@@ -335,9 +354,15 @@ class SettingsWindow(QWidget):
         self.try_out = QLabel('')
         self.try_out.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.try_out.setWordWrap(True)
-        self.try_in.textChanged.connect(lambda s: self.try_out.setText(tb.clean_url(s, tb.load_rules()) if tb.is_url(s) else ''))
+        self.try_in.textChanged.connect(self.update_try)
+        self.ed_global.textChanged.connect(self.update_try)
+        self.ed_excluded.textChanged.connect(self.update_try)
+        self.tbl.itemChanged.connect(self.update_try)
+        hint = QLabel(t('try_hint'))
+        hint.setStyleSheet('color: gray')
         box.addWidget(self.try_in)
         box.addWidget(self.try_out)
+        box.addWidget(hint)
         return page
 
     def add_site_row(self, domains, params):
@@ -345,6 +370,31 @@ class SettingsWindow(QWidget):
         self.tbl.insertRow(row)
         self.tbl.setItem(row, 0, QTableWidgetItem(domains))
         self.tbl.setItem(row, 1, QTableWidgetItem(params))
+
+    def editor_rules(self):
+        """The user rules as currently typed in the editors (not necessarily saved yet)."""
+        sites = []
+        for r in range(self.tbl.rowCount()):
+            hosts = split_csv(self.tbl.item(r, 0).text() if self.tbl.item(r, 0) else '')
+            remove = split_csv(self.tbl.item(r, 1).text() if self.tbl.item(r, 1) else '')
+            if hosts and remove:
+                sites.append({'hosts': hosts, 'remove': remove})
+        return {'global_remove': lines(self.ed_global), 'exclude_hosts': lines(self.ed_excluded), 'sites': sites}
+
+    def update_try(self, *_):
+        text = self.try_in.text()
+        if not tb.is_url(text):
+            self.try_out.setText('')
+            return
+        builtin = tb.read_json(os.path.join(tb.HERE, 'rules.json'), {})
+        mine = self.editor_rules()
+        merged = {k: list(builtin.get(k, [])) + list(mine[k]) for k in ('exclude_hosts', 'global_remove', 'sites')}
+        self.try_out.setText(tb.clean_url(text, merged))
+
+    def insert_example(self):
+        self.add_site_row('example.com', 'ref, source')
+        self.tbl.scrollToBottom()
+        self.try_in.setText('https://example.com/page?id=5&ref=newsletter&source=mail')
 
     def save_rules(self):
         sites = []
