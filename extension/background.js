@@ -60,6 +60,17 @@ async function applyRules() {
   await chrome.storage.local.set({ status: { source, ruleCount: add.length, time: Date.now() } });
 }
 
+// Tell the program which links the browser cleaned, so they show up in its log. Only an unpacked extension gets these
+// match events; for the program the cleaning is simply repeated on the original address.
+function reportToLog(source, url) {
+  chrome.runtime.sendNativeMessage(HOST, { type: 'log', source, url }).catch(() => {});
+}
+if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
+  chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
+    if (info.request && info.request.type === 'main_frame') reportToLog('browser', info.request.url);
+  });
+}
+
 // Context menu: copy the address of a link without tracking parameters.
 function setupMenu() {
   chrome.contextMenus.removeAll(() => {
@@ -71,6 +82,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== 'copy-clean-link' || !tab) return;
   const { rules } = await loadRules();
   const text = cleanUrl(info.linkUrl, rules);
+  reportToLog('browser-copy', info.linkUrl);
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: (value) => {

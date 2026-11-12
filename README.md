@@ -14,13 +14,19 @@ excluded, and the extension can be switched off per site. No network access, no 
 
 Written from scratch for KDE Plasma on Wayland with Vivaldi/Chrome; MIT licensed.
 
-## Tray app (recommended)
+## The app
 
-`./trackbye.py tray` starts URL Trackbye in the system tray (needs `python3-pyqt6`, `wl-clipboard`). It runs the clipboard
-cleaning in the background and has a settings window for everything: clipboard cleaning on/off, notifications,
-start with the desktop session, your own rules (with a live "try a link" box), registering the browser extension's
-rules, and the default-browser setup for links from other apps. English and German. With it, you do not have to
-run the commands below by hand.
+`./trackbye.py` (no arguments) starts URL Trackbye as a tray app (needs `python3-pyqt6`, `wl-clipboard`). It cleans the
+clipboard in the background and has one settings window for everything:
+
+- clipboard cleaning on/off, notifications, **start with the desktop session**, hide the tray symbol
+- **log** of cleaned links (clipboard, links opened by other apps, browser), with what was removed; stored only on this
+  computer in `~/.local/state/trackbye/log.jsonl` (500 entries), can be switched off and cleared
+- your own rules, with a live "try a link" box
+- browser setup: extension folder, sharing the rules with the extension, default browser for links from other apps
+
+English and German. Starting it a second time just opens the settings window of the running app, so with a hidden tray
+symbol you can also use the application menu entry "URL Trackbye" (created when you hide the symbol).
 
 ## Install
 

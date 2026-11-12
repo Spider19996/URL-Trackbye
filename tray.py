@@ -6,8 +6,10 @@ Started by `trackbye tray` (needs PyQt6). The clipboard is watched by `wl-paste 
 import os
 import shutil
 import sys
+import time
 
-from PyQt6.QtCore import QLockFile, QLocale, QProcess, QStandardPaths, QTimer, QUrl, Qt
+from PyQt6.QtCore import QLocale, QProcess, QTimer, QUrl, Qt
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtGui import QAction, QDesktopServices, QIcon, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
                              QPlainTextEdit, QPushButton, QSystemTrayIcon, QTableWidget, QTableWidgetItem, QTabWidget,
@@ -17,6 +19,7 @@ import trackbye as tb
 
 ASSETS = os.path.join(tb.HERE, 'assets')
 ICON = os.path.join(ASSETS, 'trackbye.png')  # app and window icon
+SERVER_NAME = 'trackbye-app'  # a second start talks to the running app through this socket
 
 # (English, German)
 TEXT = {
@@ -68,6 +71,23 @@ TEXT = {
                         'URL Trackbye als Standardbrowser festlegen? Den vorherigen kannst du hier jederzeit wiederherstellen.'),
     'about': ('Removes tracking parameters from links: in the clipboard, in links opened by other apps and in the browser (extension).\nMIT license.',
               'Entfernt Tracking-Parameter aus Links: in der Zwischenablage, in Links aus anderen Programmen und im Browser (Erweiterung).\nMIT-Lizenz.'),
+    'tab_log': ('Log', 'Protokoll'),
+    'tray_icon': ('Show the tray icon (if hidden: start URL Trackbye again or use the application menu entry to open this window)',
+                  'Tray-Symbol anzeigen (wenn ausgeblendet: URL Trackbye erneut starten oder den Eintrag im Anwendungsmenü nutzen)'),
+    'log_on': ('Keep a log of cleaned links', 'Protokoll über gesäuberte Links führen'),
+    'quit_app': ('Quit URL Trackbye', 'URL Trackbye beenden'),
+    'log_help': ('Newest first. The log is stored on this computer only (up to 500 entries).',
+                 'Neueste zuerst. Das Protokoll liegt nur auf diesem Computer (bis zu 500 Einträge).'),
+    'col_time': ('Time', 'Zeit'),
+    'col_source': ('From', 'Quelle'),
+    'col_removed': ('Removed', 'Entfernt'),
+    'col_link': ('Cleaned link', 'Gesäuberter Link'),
+    'src_clipboard': ('Clipboard', 'Zwischenablage'),
+    'src_opener': ('Opened by an app', 'Von Programm geöffnet'),
+    'src_browser': ('Browser', 'Browser'),
+    'src_browser-copy': ('Browser (copy)', 'Browser (Kopie)'),
+    'log_copy': ('Copy cleaned link', 'Gesäuberten Link kopieren'),
+    'log_clear': ('Clear log', 'Protokoll leeren'),
     'show_builtin': ('Show built-in rules', 'Eingebaute Regeln anzeigen'),
 }
 LANG = 1 if QLocale.system().name().startswith('de') else 0
@@ -143,6 +163,7 @@ class SettingsWindow(QWidget):
         tabs = QTabWidget()
         tabs.addTab(self.general_tab(), t('tab_general'))
         tabs.addTab(self.rules_tab(), t('tab_rules'))
+        tabs.addTab(self.log_tab(), t('tab_log'))
         tabs.addTab(self.browser_tab(), t('tab_browser'))
         tabs.addTab(self.about_tab(), t('tab_about'))
         layout = QVBoxLayout(self)
@@ -162,7 +183,13 @@ class SettingsWindow(QWidget):
         self.chk_auto = QCheckBox(t('autostart'))
         self.chk_auto.setChecked(os.path.exists(tb.AUTOSTART))
         self.chk_auto.toggled.connect(tb.set_autostart)
-        for w in (self.chk_clip, self.chk_notify, self.chk_auto):
+        self.chk_log = QCheckBox(t('log_on'))
+        self.chk_log.setChecked(cfg['log'])
+        self.chk_log.toggled.connect(lambda on: self.save_cfg('log', on))
+        self.chk_tray = QCheckBox(t('tray_icon'))
+        self.chk_tray.setChecked(cfg['tray_icon'])
+        self.chk_tray.toggled.connect(self.app.set_tray_visible)
+        for w in (self.chk_clip, self.chk_notify, self.chk_log, self.chk_auto, self.chk_tray):
             form.addWidget(w)
         if not ClipboardService.available():
             warn = QLabel(t('no_wl'))
@@ -175,6 +202,9 @@ class SettingsWindow(QWidget):
         row.addRow(t('browser'), self.edit_browser)
         form.addLayout(row)
         form.addStretch(1)
+        quit_btn = QPushButton(t('quit_app'))
+        quit_btn.clicked.connect(self.app.quit)
+        form.addWidget(quit_btn, alignment=Qt.AlignmentFlag.AlignRight)
         return page
 
     def save_cfg(self, key, value):
@@ -272,6 +302,75 @@ class SettingsWindow(QWidget):
         dlg.resize(560, 480)
         self._builtin = dlg
         dlg.show()
+
+    # --- Log -------------------------------------------------------------------------------------------------
+    def log_tab(self):
+        page = QWidget()
+        box = QVBoxLayout(page)
+        help_label = QLabel(t('log_help'))
+        help_label.setWordWrap(True)
+        box.addWidget(help_label)
+        self.log_table = QTableWidget(0, 4)
+        self.log_table.setHorizontalHeaderLabels([t('col_time'), t('col_source'), t('col_removed'), t('col_link')])
+        self.log_table.horizontalHeader().setStretchLastSection(True)
+        self.log_table.setColumnWidth(0, 120)
+        self.log_table.setColumnWidth(1, 130)
+        self.log_table.setColumnWidth(2, 170)
+        self.log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.log_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        box.addWidget(self.log_table)
+        row = QHBoxLayout()
+        copy = QPushButton(t('log_copy'))
+        copy.clicked.connect(self.copy_log_link)
+        clear = QPushButton(t('log_clear'))
+        clear.clicked.connect(self.clear_log)
+        row.addWidget(copy)
+        row.addStretch(1)
+        row.addWidget(clear)
+        box.addLayout(row)
+        self.log_signature = None
+        self.log_timer = QTimer(self)
+        self.log_timer.timeout.connect(self.refresh_log)
+        self.refresh_log()
+        return page
+
+    def refresh_log(self):
+        try:
+            st = os.stat(tb.LOG_PATH)
+            signature = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            signature = None
+        if signature == self.log_signature:
+            return
+        self.log_signature = signature
+        entries = list(reversed(tb.read_log()))[:300]
+        self.log_table.setRowCount(len(entries))
+        for i, e in enumerate(entries):
+            stamp = time.strftime('%d.%m. %H:%M:%S', time.localtime(e.get('t', 0)))
+            source = TEXT['src_' + e.get('src', '')][LANG] if 'src_' + e.get('src', '') in TEXT else e.get('src', '')
+            cells = [stamp, source, ', '.join(e.get('removed', [])), e.get('to', '')]
+            for c, text in enumerate(cells):
+                item = QTableWidgetItem(text)
+                item.setToolTip(e.get('from', '') + '\n→ ' + e.get('to', ''))
+                self.log_table.setItem(i, c, item)
+
+    def copy_log_link(self):
+        rows = self.log_table.selectionModel().selectedRows()
+        if rows:
+            QApplication.clipboard().setText(self.log_table.item(rows[0].row(), 3).text())
+
+    def clear_log(self):
+        tb.clear_log()
+        self.refresh_log()
+
+    def showEvent(self, event):
+        self.log_timer.start(1500)
+        self.refresh_log()
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        self.log_timer.stop()
+        super().hideEvent(event)
 
     # --- Browser ---------------------------------------------------------------------------------------------
     def browser_tab(self):
@@ -421,9 +520,10 @@ class TrayApp:
         self.act_clip.setChecked(on)
         self.act_clip.blockSignals(False)
         self.apply(on)
-        self.tray.show()
-        if not os.path.exists(os.path.join(tb.CONFIG_DIR, 'config.json')):
-            self.show_settings()  # first start: open the settings once
+        show_tray = tb.load_config()['tray_icon'] and QSystemTrayIcon.isSystemTrayAvailable()
+        self.tray.setVisible(show_tray)
+        if not show_tray or not os.path.exists(os.path.join(tb.CONFIG_DIR, 'config.json')):
+            self.show_settings()  # no tray symbol to click, or first start: open the settings
 
     def apply(self, on):
         self.service.sync(on)
@@ -444,6 +544,16 @@ class TrayApp:
             self.window.chk_clip.blockSignals(True)
             self.window.chk_clip.setChecked(on)
             self.window.chk_clip.blockSignals(False)
+
+    def set_tray_visible(self, on):
+        cfg = tb.load_config()
+        cfg['tray_icon'] = bool(on)
+        tb.save_config(cfg)
+        if on:
+            self.tray.setVisible(QSystemTrayIcon.isSystemTrayAvailable())
+        else:
+            tb.install_launcher()  # keep a way back to the settings
+            self.tray.setVisible(False)
 
     def show_settings(self):
         if self.window is None:
@@ -466,15 +576,27 @@ class TrayApp:
 def run():
     qapp = QApplication(sys.argv[:1])
     qapp.setApplicationName('trackbye')
+    qapp.setWindowIcon(QIcon(ICON))
     qapp.setQuitOnLastWindowClosed(False)
-    lock_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.TempLocation)
-    lock = QLockFile(os.path.join(lock_dir, 'trackbye-tray.lock'))
-    lock.setStaleLockTime(0)
-    if not lock.tryLock(100):
-        print('URL Trackbye is already running.')
+    # Already running? Ask that instance to show its settings window and leave.
+    sock = QLocalSocket()
+    sock.connectToServer(SERVER_NAME)
+    if sock.waitForConnected(300):
+        sock.write(b'show')
+        sock.flush()
+        sock.waitForBytesWritten(300)
+        print('URL Trackbye is already running; its settings window was opened.')
         return 0
+    QLocalServer.removeServer(SERVER_NAME)
+    server = QLocalServer()
+    server.listen(SERVER_NAME)
+    app = TrayApp(qapp)
+
+    def on_connection():
+        conn = server.nextPendingConnection()
+        if conn is not None:
+            conn.readyRead.connect(lambda: (conn.readAll(), app.show_settings()))
+    server.newConnection.connect(on_connection)
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        print('No system tray found on this desktop.', file=sys.stderr)
-        return 1
-    app = TrayApp(qapp)  # noqa: F841 (kept alive by the event loop)
+        print('No system tray found on this desktop: running with the settings window only.', file=sys.stderr)
     return qapp.exec()

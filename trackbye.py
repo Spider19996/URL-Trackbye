@@ -4,7 +4,7 @@
 One small program with several jobs that all use the same rules (rules.json):
 
   trackbye clean URL...      print the cleaned URLs
-  trackbye tray              tray app (needs PyQt6): clipboard cleaning, settings window, browser setup
+  trackbye                   start the app (tray symbol, clipboard cleaning, log, settings). Needs PyQt6.
   trackbye watch             watch the clipboard (Wayland, needs wl-clipboard) and clean copied URLs
   trackbye open [URL...]     clean the URLs and open them in the real browser (use as default browser)
   trackbye install-handler   write the desktop entry that makes `open` selectable as default browser
@@ -20,15 +20,20 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 CONFIG_DIR = os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'trackbye')
 HOST_NAME = 'de.trackbye.host'
 # Fixed by the "key" in extension/manifest.json, so the host manifest can name exactly this extension.
 EXTENSION_ID = 'kcppbmmghccgpmjafccjammekemegidd'
-DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': ''}
+STATE_DIR = os.path.join(os.environ.get('XDG_STATE_HOME', os.path.expanduser('~/.local/state')), 'trackbye')
+LOG_PATH = os.path.join(STATE_DIR, 'log.jsonl')
+LOG_MAX = 500
+DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
+                  'log': True, 'tray_icon': True}
 SCRIPT = os.path.realpath(__file__)
-VERSION = '0.2.1'
+VERSION = '0.3.0'
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -119,6 +124,70 @@ def clean_url(url, rules):
 
 
 # --------------------------------------------------------------------------------------------------------------
+# Log of cleaned links (one JSON object per line, newest last, trimmed to LOG_MAX)
+# --------------------------------------------------------------------------------------------------------------
+
+def query_keys(url):
+    base = url.split('#', 1)[0]
+    query = base.split('?', 1)[1] if '?' in base else ''
+    return [p.split('=', 1)[0] for p in query.split('&') if p]
+
+
+def removed_params(before, after):
+    kept = query_keys(after)
+    gone = []
+    for key in query_keys(before):
+        if key in kept:
+            kept.remove(key)
+        else:
+            gone.append(key)
+    return gone
+
+
+def read_log():
+    entries = []
+    try:
+        with open(LOG_PATH, encoding='utf-8') as f:
+            for line in f:
+                try:
+                    entries.append(json.loads(line))
+                except ValueError:
+                    pass
+    except OSError:
+        pass
+    return entries
+
+
+def write_log(entries):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = LOG_PATH + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        for e in entries[-LOG_MAX:]:
+            f.write(json.dumps(e, ensure_ascii=False) + '\n')
+    os.replace(tmp, LOG_PATH)
+
+
+def clear_log():
+    write_log([])
+
+
+def log_event(source, before, after):
+    """Remember that a link was cleaned. A second step on the same link within 3 seconds (the browser cleans in
+    several passes) is merged into the previous entry."""
+    if before == after or not load_config().get('log', True):
+        return
+    now = time.time()
+    entries = read_log()
+    last = entries[-1] if entries else None
+    if last and last.get('src') == source and last.get('to') == before and now - last.get('t', 0) < 3:
+        last['to'] = after
+        last['removed'] = last.get('removed', []) + removed_params(before, after)
+    else:
+        entries.append({'t': now, 'src': source, 'from': before, 'to': after, 'removed': removed_params(before, after)})
+    write_log(entries)
+
+
+# --------------------------------------------------------------------------------------------------------------
 # Commands
 # --------------------------------------------------------------------------------------------------------------
 
@@ -147,6 +216,7 @@ def cmd_filter_clip():
     cleaned = clean_url(text, load_rules())
     if cleaned != text.strip():
         subprocess.run(['wl-copy', '--type', 'text/plain'], input=cleaned.encode('utf-8'), check=False)
+        log_event('clipboard', text.strip(), cleaned)
         notify('Cleaned the copied link')
 
 
@@ -165,7 +235,12 @@ def cmd_open(args):
     if os.path.basename(shutil.which(browser) or browser) in ('trackbye', 'trackbye.py'):
         sys.exit('The "browser" setting must name the real browser, not trackbye.')
     rules = load_rules()
-    os.execvp(browser, [browser] + [clean_url(a, rules) for a in args])
+    urls = []
+    for a in args:
+        cleaned = clean_url(a, rules)
+        log_event('opener', a, cleaned)
+        urls.append(cleaned)
+    os.execvp(browser, [browser] + urls)
 
 
 def desktop_file():
@@ -245,10 +320,22 @@ def set_autostart(on):
     if on:
         os.makedirs(os.path.dirname(AUTOSTART), exist_ok=True)
         with open(AUTOSTART, 'w', encoding='utf-8') as f:
-            f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nExec=' + SCRIPT + ' tray\nTerminal=false\n'
+            f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nExec=' + SCRIPT + '\nTerminal=false\n'
                     'Icon=' + os.path.join(HERE, 'assets', 'trackbye.png') + '\nX-KDE-autostart-after=panel\n')
     elif os.path.exists(AUTOSTART):
         os.remove(AUTOSTART)
+
+
+LAUNCHER = os.path.expanduser('~/.local/share/applications/trackbye-app.desktop')
+
+
+def install_launcher():
+    """Application menu entry, so the settings stay reachable while the tray symbol is hidden."""
+    os.makedirs(os.path.dirname(LAUNCHER), exist_ok=True)
+    with open(LAUNCHER, 'w', encoding='utf-8') as f:
+        f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nComment=Remove tracking from links\n'
+                'Exec=' + SCRIPT + '\nTerminal=false\nIcon=' + os.path.join(HERE, 'assets', 'trackbye.png') +
+                '\nCategories=Network;Utility;\n')
 
 
 def extension_version():
@@ -286,6 +373,10 @@ def cmd_native():
         kind = msg.get('type')
         if kind == 'rules':
             send_message({'ok': True, 'rules': load_rules()})
+        elif kind == 'log':
+            url = str(msg.get('url', ''))
+            log_event(str(msg.get('source', 'browser')), url, clean_url(url, load_rules()))
+            send_message({'ok': True})
         elif kind == 'version':
             send_message({'ok': True, 'version': extension_version(), 'program': VERSION})
         elif kind == 'clean':
@@ -298,7 +389,7 @@ def main(argv):
     # The browser starts a native host with the extension origin as its only argument.
     if len(argv) > 1 and argv[1].startswith('chrome-extension://'):
         return cmd_native()
-    cmd = argv[1] if len(argv) > 1 else ''
+    cmd = argv[1] if len(argv) > 1 else 'tray'
     rest = argv[2:]
     if cmd == 'clean':
         cmd_clean(rest)
@@ -318,7 +409,7 @@ def main(argv):
         cmd_native()
     else:
         print(__doc__)
-        return 0 if cmd in ('', '-h', '--help') else 2
+        return 0 if cmd in ('help', '-h', '--help') else 2
     return 0
 
 
