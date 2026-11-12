@@ -28,7 +28,7 @@ HOST_NAME = 'de.trackbye.host'
 EXTENSION_ID = 'kcppbmmghccgpmjafccjammekemegidd'
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': ''}
 SCRIPT = os.path.realpath(__file__)
-VERSION = '0.2.0'
+VERSION = '0.2.1'
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -178,7 +178,7 @@ def install_handler():
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye (clean links, then open browser)\n'
-                'Exec=' + SCRIPT + ' open %U\nTerminal=false\nIcon=' + os.path.join(HERE, 'extension', 'icons', 'icon128.png')
+                'Exec=' + SCRIPT + ' open %U\nTerminal=false\nIcon=' + os.path.join(HERE, 'assets', 'trackbye.png')
                 + '\nCategories=Network;WebBrowser;\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\n')
     return path
 
@@ -246,7 +246,7 @@ def set_autostart(on):
         os.makedirs(os.path.dirname(AUTOSTART), exist_ok=True)
         with open(AUTOSTART, 'w', encoding='utf-8') as f:
             f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nExec=' + SCRIPT + ' tray\nTerminal=false\n'
-                    'X-KDE-autostart-after=panel\n')
+                    'Icon=' + os.path.join(HERE, 'assets', 'trackbye.png') + '\nX-KDE-autostart-after=panel\n')
     elif os.path.exists(AUTOSTART):
         os.remove(AUTOSTART)
 

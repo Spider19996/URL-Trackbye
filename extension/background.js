@@ -33,8 +33,16 @@ function redirectRule(id, names, domains, excluded) {
   };
 }
 
+// Colored icon while cleaning, gray icon while switched off.
+function setIconState(enabled) {
+  const prefix = enabled ? 'icon' : 'off';
+  chrome.action.setIcon({ path: { 16: 'icons/' + prefix + '16.png', 32: 'icons/' + prefix + '32.png', 48: 'icons/' + prefix + '48.png' } });
+  chrome.action.setTitle({ title: enabled ? 'URL Trackbye' : 'URL Trackbye (off)' });
+}
+
 async function applyRules() {
   const settings = await getSettings();
+  setIconState(settings.enabled);
   const { rules, source } = await loadRules();
   const excluded = (rules.exclude_hosts || []).concat(settings.disabledSites);
   const add = [];

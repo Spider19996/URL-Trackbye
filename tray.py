@@ -8,14 +8,15 @@ import shutil
 import sys
 
 from PyQt6.QtCore import QLockFile, QLocale, QProcess, QStandardPaths, QTimer, QUrl, Qt
-from PyQt6.QtGui import QAction, QDesktopServices, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QAction, QDesktopServices, QIcon, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
                              QPlainTextEdit, QPushButton, QSystemTrayIcon, QTableWidget, QTableWidgetItem, QTabWidget,
                              QVBoxLayout, QWidget)
 
 import trackbye as tb
 
-ICON = os.path.join(tb.HERE, 'extension', 'icons', 'icon128.png')
+ASSETS = os.path.join(tb.HERE, 'assets')
+ICON = os.path.join(ASSETS, 'trackbye.png')  # app and window icon
 
 # (English, German)
 TEXT = {
@@ -383,14 +384,16 @@ class TrayApp:
         self.qapp = qapp
         self.service = ClipboardService()
         self.window = None
-        self.icon_on = QIcon(ICON)
-        pm = QPixmap(ICON)
-        dim = QPixmap(pm.size())
+        # The tray glyph is white on dark panels and dark on light panels (follows the desktop theme).
+        dark_panel = qapp.palette().color(QPalette.ColorRole.Window).lightness() < 128
+        glyph = QPixmap(os.path.join(ASSETS, 'tray-light.png' if dark_panel else 'tray-dark.png'))
+        dim = QPixmap(glyph.size())
         dim.fill(Qt.GlobalColor.transparent)
         painter = QPainter(dim)
         painter.setOpacity(0.4)
-        painter.drawPixmap(0, 0, pm)
+        painter.drawPixmap(0, 0, glyph)
         painter.end()
+        self.icon_on = QIcon(glyph)
         self.icon_off = QIcon(dim)
 
         self.tray = QSystemTrayIcon()
