@@ -20,6 +20,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 
@@ -270,12 +271,17 @@ def cmd_filter_clip():
         return
     cleaned = clean_url(text, load_rules())
     if cleaned != text.strip():
-        result = subprocess.run(['wl-copy', '--type', 'text/plain'], input=cleaned.encode('utf-8'), capture_output=True,
-                                check=False)
-        if result.returncode != 0:
-            diag('error', 'wl-copy failed (exit %d): %s' % (result.returncode, result.stderr.decode('utf-8', 'replace').strip()),
-                 'clipboard')
-            return
+        # wl-copy stays in the background to serve the clipboard and keeps inherited pipes open, so its output goes
+        # to a temp file (never a pipe: waiting for a pipe would block until the clipboard changes again).
+        with tempfile.TemporaryFile() as err:
+            proc = subprocess.Popen(['wl-copy', '--type', 'text/plain'], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                    stderr=err)
+            proc.communicate(cleaned.encode('utf-8'))
+            if proc.returncode != 0:
+                err.seek(0)
+                diag('error', 'wl-copy failed (exit %d): %s' % (proc.returncode, err.read().decode('utf-8', 'replace').strip()),
+                     'clipboard')
+                return
         log_event('clipboard', text.strip(), cleaned)
         notify('Cleaned the copied link')
 

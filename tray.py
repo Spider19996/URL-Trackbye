@@ -19,6 +19,8 @@ import trackbye as tb
 
 ASSETS = os.path.join(tb.HERE, 'assets')
 ICON = os.path.join(ASSETS, 'trackbye.png')  # app and window icon
+TEST_MARKER = 'trackbye-test'
+TEST_URL = 'https://example.com/?id=5&utm_source=trackbye-test&utm_medium=email&fbclid=trackbye-test'
 SERVER_NAME = 'trackbye-app'  # a second start talks to the running app through this socket
 
 # (English, German)
@@ -131,6 +133,32 @@ TEXT = {
     'ph_excluded': ('e.g. shop.example.org (one domain per line)', 'z. B. shop.example.org (eine Domain pro Zeile)'),
     'try_hint': ('Changes show here right away; they only apply to real links after you press Save.',
                  'Änderungen sieht man hier sofort; für echte Links gelten sie erst nach "Speichern".'),
+    'tab_test': ('Test', 'Test'),
+    'tst_help': ('Try each part with this example link. The tracking parts (utm_source, utm_medium, fbclid) should disappear, only "?id=5" should stay.',
+                 'Probiere jeden Teil mit diesem Beispiel-Link aus. Die Tracking-Teile (utm_source, utm_medium, fbclid) sollten verschwinden, nur "?id=5" bleibt.'),
+    'tst_url': ('Example link (with tracking):', 'Beispiel-Link (mit Tracking):'),
+    'tst_expect': ('Expected result:', 'Erwartetes Ergebnis:'),
+    'tst_copy': ('1. Copy the example link', '1. Beispiel-Link kopieren'),
+    'tst_copy_info': ('Tests the clipboard cleaning. Then paste it anywhere to see the result.',
+                      'Testet das Säubern der Zwischenablage. Danach irgendwo einfügen, um das Ergebnis zu sehen.'),
+    'tst_browser': ('2. Open it in the browser', '2. Im Browser öffnen'),
+    'tst_browser_info': ('Tests the browser extension: the address bar should show only ?id=5 (the page example.com opens).',
+                         'Testet die Browser-Erweiterung: Die Adresszeile sollte nur ?id=5 zeigen (es öffnet sich die Seite example.com).'),
+    'tst_system': ('3. Open it like another app would', '3. Wie ein anderes Programm öffnen'),
+    'tst_system_info': ('Tests the link opener (Discord, mail, …): it works when URL Trackbye is the default browser.',
+                        'Testet den Link-Öffner (Discord, Mail, …): Er greift, wenn URL Trackbye der Standardbrowser ist.'),
+    'tst_none': ('not tested yet', 'noch nicht getestet'),
+    'tst_wait': ('waiting …', 'warte …'),
+    'tst_ok': ('✓ cleaned at {t}, removed: {r}', '✓ gesäubert um {t}, entfernt: {r}'),
+    'tst_fail_clip': ('✗ nothing happened. Is "Clean copied links" on and wl-clipboard installed? See Messages.',
+                      '✗ nichts passiert. Ist "Kopierte Links säubern" an und wl-clipboard installiert? Siehe Meldungen.'),
+    'tst_fail_browser': ('✗ not seen here. Look at the address bar. It shows up here only with the extension loaded and the rule sharing set up (Browser tab).',
+                         '✗ hier nicht gesehen. Schau in die Adresszeile. Hier erscheint es nur mit geladener Erweiterung und eingerichteter Regel-Anbindung (Tab Browser).'),
+    'tst_fail_system': ('✗ not seen: URL Trackbye is not your default browser (Browser tab), or the system opened the link directly.',
+                        '✗ nicht gesehen: URL Trackbye ist nicht dein Standardbrowser (Tab Browser) oder das System hat den Link direkt geöffnet.'),
+    'tst_row_clip': ('Clipboard', 'Zwischenablage'),
+    'tst_row_browser': ('Browser extension', 'Browser-Erweiterung'),
+    'tst_row_system': ('Link opener', 'Link-Öffner'),
     'show_builtin': ('Show built-in rules', 'Eingebaute Regeln anzeigen'),
 }
 LANG = 1 if QLocale.system().name().startswith('de') else 0
@@ -420,6 +448,85 @@ class SettingsWindow(QWidget):
         self._builtin = dlg
         dlg.show()
 
+    # --- Test ------------------------------------------------------------------------------------------------
+    def test_tab(self):
+        page = QWidget()
+        box = QVBoxLayout(page)
+        help_label = QLabel(t('tst_help'))
+        help_label.setWordWrap(True)
+        box.addWidget(help_label)
+        form = QFormLayout()
+        url = QLineEdit(TEST_URL)
+        url.setReadOnly(True)
+        form.addRow(t('tst_url'), url)
+        expected = QLineEdit(tb.clean_url(TEST_URL, tb.load_rules()))
+        expected.setReadOnly(True)
+        form.addRow(t('tst_expect'), expected)
+        box.addLayout(form)
+        self.tests = {}     # key -> time the test was started
+        self.test_labels = {}
+        steps = (('clipboard', 'tst_copy', 'tst_copy_info', 'tst_row_clip', self.test_copy),
+                 ('browser', 'tst_browser', 'tst_browser_info', 'tst_row_browser', self.test_browser),
+                 ('opener', 'tst_system', 'tst_system_info', 'tst_row_system', self.test_system))
+        for key, button, info, row, action in steps:
+            line = QHBoxLayout()
+            btn = QPushButton(t(button))
+            btn.setMinimumWidth(240)
+            btn.clicked.connect(action)
+            line.addWidget(btn)
+            text = QLabel(t(info))
+            text.setWordWrap(True)
+            text.setStyleSheet('color: gray')
+            line.addWidget(text, 1)
+            box.addLayout(line)
+            result = QLabel(t('tst_row_' + {'clipboard': 'clip', 'browser': 'browser', 'opener': 'system'}[key]) + ': ' + t('tst_none'))
+            result.setWordWrap(True)
+            result.setContentsMargins(12, 0, 0, 6)
+            result.setMinimumHeight(44)
+            result.setAlignment(Qt.AlignmentFlag.AlignTop)
+            box.addWidget(result)
+            self.test_labels[key] = result
+        box.addStretch(1)
+        return page
+
+    def start_test(self, key):
+        self.tests[key] = time.time()
+        self.show_test(key, t('tst_wait'))
+
+    def test_copy(self):
+        self.start_test('clipboard')
+        QApplication.clipboard().setText(TEST_URL)
+
+    def test_browser(self):
+        self.start_test('browser')
+        QProcess.startDetached(tb.load_config()['browser'], [TEST_URL])
+
+    def test_system(self):
+        self.start_test('opener')
+        QDesktopServices.openUrl(QUrl(TEST_URL))
+
+    def show_test(self, key, text, color=''):
+        names = {'clipboard': 'tst_row_clip', 'browser': 'tst_row_browser', 'opener': 'tst_row_system'}
+        label = self.test_labels[key]
+        label.setText(t(names[key]) + ': ' + text)
+        label.setStyleSheet('color: ' + color if color else '')
+
+    def refresh_tests(self):
+        """Look in the log for the effect of each started test; give up after 12 seconds."""
+        if not self.tests:
+            return
+        events = tb.read_log()
+        fail = {'clipboard': 'tst_fail_clip', 'browser': 'tst_fail_browser', 'opener': 'tst_fail_system'}
+        for key, started in list(self.tests.items()):
+            hit = [e for e in events if e.get('src') == key and TEST_MARKER in e.get('from', '') and e.get('t', 0) >= started - 1]
+            if hit:
+                e = hit[-1]
+                self.show_test(key, t('tst_ok', t=time.strftime('%H:%M:%S', time.localtime(e['t'])), r=', '.join(e.get('removed', []))), '#1e8449')
+                del self.tests[key]
+            elif time.time() - started > 12:
+                self.show_test(key, t(fail[key]), '#c0392b')
+                del self.tests[key]
+
     # --- Log -------------------------------------------------------------------------------------------------
     def log_tab(self):
         page = QWidget()
@@ -449,6 +556,7 @@ class SettingsWindow(QWidget):
         self.log_timer = QTimer(self)
         self.log_timer.timeout.connect(self.refresh_log)
         self.log_timer.timeout.connect(lambda: self.refresh_events())
+        self.log_timer.timeout.connect(self.refresh_tests)
         self.refresh_log()
         return page
 
@@ -707,6 +815,7 @@ class SettingsWindow(QWidget):
         text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         box.addWidget(text)
         logs = QTabWidget()
+        logs.addTab(self.test_tab(), t('tab_test'))
         logs.addTab(self.log_tab(), t('tab_log'))
         logs.addTab(self.events_tab(), t('tab_events'))
         box.addWidget(logs, 1)
