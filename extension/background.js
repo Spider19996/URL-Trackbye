@@ -81,9 +81,28 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   });
 });
 
-chrome.runtime.onInstalled.addListener(() => { setupMenu(); applyRules(); });
-chrome.runtime.onStartup.addListener(applyRules);
+// With the program installed: pick up changed rules regularly, and reload this extension when the program's copy of
+// it (the files on disk) has a newer version. For an unpacked extension, reload() re-reads the files from disk.
+async function checkForUpdate() {
+  try {
+    const reply = await chrome.runtime.sendNativeMessage(HOST, { type: 'version' });
+    if (reply && reply.ok && reply.version && reply.version !== chrome.runtime.getManifest().version) {
+      chrome.runtime.reload();
+    }
+  } catch (e) { /* program not installed */ }
+}
+
+async function refresh() {
+  await checkForUpdate();
+  await applyRules();
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === 'refresh') refresh(); });
+function scheduleRefresh() { chrome.alarms.create('refresh', { periodInMinutes: 30 }); }
+
+chrome.runtime.onInstalled.addListener(() => { setupMenu(); scheduleRefresh(); applyRules(); });
+chrome.runtime.onStartup.addListener(() => { scheduleRefresh(); refresh(); });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && (changes.enabled || changes.disabledSites)) applyRules();
 });
-chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.type === 'refresh') applyRules(); });
+chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.type === 'refresh') refresh(); });

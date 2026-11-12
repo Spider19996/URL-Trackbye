@@ -12,6 +12,7 @@ document.querySelectorAll('[data-i18n]').forEach((e) => { e.textContent = t[e.da
 const $ = (id) => document.getElementById(id);
 
 async function main() {
+  chrome.runtime.sendMessage({ type: 'refresh' }).catch(() => {});
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let host = '';
   try { host = new URL(tab.url).hostname; } catch (e) { /* no web page */ }

@@ -14,6 +14,14 @@ excluded, and the extension can be switched off per site. No network access, no 
 
 Written from scratch for KDE Plasma on Wayland with Vivaldi/Chrome; MIT licensed.
 
+## Tray app (recommended)
+
+`./trackbye.py tray` starts URL Trackbye in the system tray (needs `python3-pyqt6`, `wl-clipboard`). It runs the clipboard
+cleaning in the background and has a settings window for everything: clipboard cleaning on/off, notifications,
+start with the desktop session, your own rules (with a live "try a link" box), registering the browser extension's
+rules, and the default-browser setup for links from other apps. English and German. With it, you do not have to
+run the commands below by hand.
+
 ## Install
 
 ```bash
@@ -21,7 +29,7 @@ git clone <this repo> ~/GitHub/url-trackbye && cd ~/GitHub/url-trackbye
 ./trackbye.py clean 'https://www.youtube.com/watch?v=abc&si=xyz'   # try it
 ```
 
-Needs Python 3.8+. For the clipboard part also `wl-clipboard` (`wl-paste`, `wl-copy`).
+Needs Python 3.8+. For the clipboard part also `wl-clipboard` (`wl-paste`, `wl-copy`); for the tray app `python3-pyqt6`.
 
 ### Clipboard (Wayland)
 
@@ -49,7 +57,9 @@ copies marked by a password manager are never touched.
    The extension has a fixed ID (`kcppbmmghccgpmjafccjammekemegidd`).
 2. Optional, so the extension uses the same rules as the program (including your own additions):
    `./trackbye.py install-native` (registers the native messaging host for the browsers found in `~/.config`).
-   Without it the extension uses its bundled copy of `rules.json`. The popup shows which one is active.
+   Without it the extension uses its bundled copy of `rules.json`. The popup shows which one is active. With the program
+   installed the extension also picks up changed rules every 30 minutes and **reloads itself** when the extension
+   files on disk have a newer version (after a `git pull`, bump `version` in `extension/manifest.json` for releases).
 
 ### Links from other apps (Discord, ...)
 
