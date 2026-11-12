@@ -33,7 +33,7 @@ TEXT = {
     'tab_general': ('General', 'Allgemein'),
     'tab_rules': ('Rules', 'Regeln'),
     'tab_browser': ('Browser', 'Browser'),
-    'tab_about': ('About', 'Info'),
+    'tab_about': ('Info and log', 'Info und Protokoll'),
     'no_wl': ('wl-clipboard (wl-paste, wl-copy) is missing: copied links cannot be cleaned. Install it: sudo apt install wl-clipboard',
               'wl-clipboard (wl-paste, wl-copy) fehlt: kopierte Links können nicht gesäubert werden. Installieren: sudo apt install wl-clipboard'),
     'rules_help': ('Your own additions to the built-in rules. One parameter name per line (exact names, no wildcards).',
@@ -71,7 +71,7 @@ TEXT = {
                         'URL Trackbye als Standardbrowser festlegen? Den vorherigen kannst du hier jederzeit wiederherstellen.'),
     'about': ('Removes tracking parameters from links: in the clipboard, in links opened by other apps and in the browser (extension).\nMIT license.',
               'Entfernt Tracking-Parameter aus Links: in der Zwischenablage, in Links aus anderen Programmen und im Browser (Erweiterung).\nMIT-Lizenz.'),
-    'tab_log': ('Log', 'Protokoll'),
+    'tab_log': ('Cleaned links', 'Gesäuberte Links'),
     'tray_icon': ('Show the tray icon (if hidden: start URL Trackbye again or use the application menu entry to open this window)',
                   'Tray-Symbol anzeigen (wenn ausgeblendet: URL Trackbye erneut starten oder den Eintrag im Anwendungsmenü nutzen)'),
     'log_on': ('Keep a log of cleaned links', 'Protokoll über gesäuberte Links führen'),
@@ -182,8 +182,6 @@ class SettingsWindow(QWidget):
         tabs = QTabWidget()
         tabs.addTab(self.general_tab(), t('tab_general'))
         tabs.addTab(self.rules_tab(), t('tab_rules'))
-        tabs.addTab(self.log_tab(), t('tab_log'))
-        tabs.addTab(self.events_tab(), t('tab_events'))
         tabs.addTab(self.browser_tab(), t('tab_browser'))
         tabs.addTab(self.about_tab(), t('tab_about'))
         layout = QVBoxLayout(self)
@@ -562,14 +560,15 @@ class SettingsWindow(QWidget):
     def about_tab(self):
         page = QWidget()
         box = QVBoxLayout(page)
-        box.addWidget(QLabel('<h2>URL Trackbye ' + tb.VERSION + '</h2>'))
-        text = QLabel(t('about'))
+        box.addWidget(QLabel('<b>URL Trackbye ' + tb.VERSION + '</b>'))
+        text = QLabel(t('about') + '\n' + tb.HERE)
         text.setWordWrap(True)
+        text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         box.addWidget(text)
-        folder = QLabel(tb.HERE)
-        folder.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        box.addWidget(folder)
-        box.addStretch(1)
+        logs = QTabWidget()
+        logs.addTab(self.log_tab(), t('tab_log'))
+        logs.addTab(self.events_tab(), t('tab_events'))
+        box.addWidget(logs, 1)
         return page
 
 
