@@ -1,11 +1,11 @@
-# linkfeger
+# linkbroom
 
 Removes tracking parameters (`utm_*`, `fbclid`, Google's `sxsrf`/`ei`/..., YouTube's `si`, ...) from links, system-wide:
 
 | Where | How |
 | --- | --- |
-| Copied links (any app) | `linkfeger watch` cleans every single URL you copy (Wayland / wl-clipboard) |
-| Links opened by other apps (Discord, mail, ...) | `linkfeger open` as default browser cleans the URL, then starts your real browser |
+| Copied links (any app) | `linkbroom watch` cleans every single URL you copy (Wayland / wl-clipboard) |
+| Links opened by other apps (Discord, mail, ...) | `linkbroom open` as default browser cleans the URL, then starts your real browser |
 | Links in the browser | The browser extension cleans the address **before the page loads**, and adds "Copy clean link address" to the context menu |
 
 All parts share one rule list (`rules.json`). It is **not radical**: only known tracking parameters are removed, so
@@ -17,30 +17,30 @@ Written from scratch for KDE Plasma on Wayland with Vivaldi/Chrome; MIT licensed
 ## Install
 
 ```bash
-git clone <this repo> ~/GitHub/linkfeger && cd ~/GitHub/linkfeger
-./linkfeger.py clean 'https://www.youtube.com/watch?v=abc&si=xyz'   # try it
+git clone <this repo> ~/GitHub/linkbroom && cd ~/GitHub/linkbroom
+./linkbroom.py clean 'https://www.youtube.com/watch?v=abc&si=xyz'   # try it
 ```
 
 Needs Python 3.8+. For the clipboard part also `wl-clipboard` (`wl-paste`, `wl-copy`).
 
 ### Clipboard (Wayland)
 
-`linkfeger watch` runs in the foreground. To start it with your session, create
-`~/.config/systemd/user/linkfeger.service`:
+`linkbroom watch` runs in the foreground. To start it with your session, create
+`~/.config/systemd/user/linkbroom.service`:
 
 ```ini
 [Unit]
-Description=linkfeger clipboard cleaner
+Description=linkbroom clipboard cleaner
 
 [Service]
-ExecStart=%h/GitHub/linkfeger/linkfeger.py watch
+ExecStart=%h/GitHub/linkbroom/linkbroom.py watch
 Restart=on-failure
 
 [Install]
 WantedBy=default.target
 ```
 
-then `systemctl --user enable --now linkfeger`. Only a clipboard that holds exactly one http(s) URL is changed;
+then `systemctl --user enable --now linkbroom`. Only a clipboard that holds exactly one http(s) URL is changed;
 copies marked by a password manager are never touched.
 
 ### Browser extension (Vivaldi / Chrome / Chromium)
@@ -48,22 +48,22 @@ copies marked by a password manager are never touched.
 1. Open `vivaldi://extensions`, enable developer mode, **Load unpacked**, choose the `extension` folder.
    The extension has a fixed ID (`kcppbmmghccgpmjafccjammekemegidd`).
 2. Optional, so the extension uses the same rules as the program (including your own additions):
-   `./linkfeger.py install-native` (registers the native messaging host for the browsers found in `~/.config`).
+   `./linkbroom.py install-native` (registers the native messaging host for the browsers found in `~/.config`).
    Without it the extension uses its bundled copy of `rules.json`. The popup shows which one is active.
 
 ### Links from other apps (Discord, ...)
 
 ```bash
-./linkfeger.py install-handler              # writes linkfeger.desktop
-./linkfeger.py install-handler --set-default   # also makes it your default browser
+./linkbroom.py install-handler              # writes linkbroom.desktop
+./linkbroom.py install-handler --set-default   # also makes it your default browser
 ```
 
-Set `"browser"` in `~/.config/linkfeger/config.json` if your browser is not `vivaldi-stable`. Undo with
+Set `"browser"` in `~/.config/linkbroom/config.json` if your browser is not `vivaldi-stable`. Undo with
 `xdg-settings set default-web-browser vivaldi-stable.desktop`.
 
 ## Your own rules
 
-`~/.config/linkfeger/rules.json` is merged with the built-in rules (same format):
+`~/.config/linkbroom/rules.json` is merged with the built-in rules (same format):
 
 ```json
 { "global_remove": ["my_tracker"], "sites": [{ "hosts": ["example.com"], "remove": ["ref"] }], "exclude_hosts": ["shop.example.org"] }

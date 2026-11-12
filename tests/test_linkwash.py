@@ -3,13 +3,13 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-import linkfeger  # noqa: E402
+import linkbroom  # noqa: E402
 
-RULES = linkfeger.read_json(os.path.join(linkfeger.HERE, 'rules.json'), {})
+RULES = linkbroom.read_json(os.path.join(linkbroom.HERE, 'rules.json'), {})
 
 
 def clean(url):
-    return linkfeger.clean_url(url, RULES)
+    return linkbroom.clean_url(url, RULES)
 
 
 class CleanUrl(unittest.TestCase):
@@ -73,7 +73,7 @@ class SharedVectors(unittest.TestCase):
                 self.assertEqual(clean(given), expected, given)
 
     def test_extension_rules_copy_is_in_sync(self):
-        copy = linkfeger.read_json(os.path.join(linkfeger.HERE, 'extension', 'rules.json'), None)
+        copy = linkbroom.read_json(os.path.join(linkbroom.HERE, 'extension', 'rules.json'), None)
         self.assertEqual(copy, RULES)
 
 

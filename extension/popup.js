@@ -2,9 +2,9 @@ import { cleanUrl } from './cleaner.js';
 
 const T = {
   en: { enabled: 'Clean links automatically', site: 'Not on this site:', copy: 'Copy clean address of this tab',
-    copied: 'Copied.', nothing: 'No address found.', program: 'Rules from the linkfeger program', bundled: 'Bundled rules (program not found)' },
+    copied: 'Copied.', nothing: 'No address found.', program: 'Rules from the linkbroom program', bundled: 'Bundled rules (program not found)' },
   de: { enabled: 'Links automatisch säubern', site: 'Nicht auf dieser Seite:', copy: 'Saubere Adresse dieses Tabs kopieren',
-    copied: 'Kopiert.', nothing: 'Keine Adresse gefunden.', program: 'Regeln vom linkfeger-Programm', bundled: 'Mitgelieferte Regeln (Programm nicht gefunden)' },
+    copied: 'Kopiert.', nothing: 'Keine Adresse gefunden.', program: 'Regeln vom linkbroom-Programm', bundled: 'Mitgelieferte Regeln (Programm nicht gefunden)' },
 };
 const t = T[(navigator.language || 'en').slice(0, 2)] || T.en;
 document.querySelectorAll('[data-i18n]').forEach((e) => { e.textContent = t[e.dataset.i18n]; });
@@ -31,7 +31,7 @@ async function main() {
     if (!tab || !tab.url) { $('msg').textContent = t.nothing; return; }
     const rules = await (await fetch(chrome.runtime.getURL('rules.json'))).json();
     let program = null;
-    try { const r = await chrome.runtime.sendNativeMessage('de.linkfeger.host', { type: 'rules' }); if (r && r.ok) program = r.rules; } catch (e) { /* none */ }
+    try { const r = await chrome.runtime.sendNativeMessage('de.linkbroom.host', { type: 'rules' }); if (r && r.ok) program = r.rules; } catch (e) { /* none */ }
     await navigator.clipboard.writeText(cleanUrl(tab.url, program || rules));
     $('msg').textContent = t.copied;
   });
