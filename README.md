@@ -109,4 +109,8 @@ python3 -m unittest discover -s tests   # Python
 node tests/test_extension.mjs           # the extension's cleaner, same test vectors
 ```
 
+The extension version must change exactly when the extension changes (the app only asks you to reload the extension
+when its version differs, so unrelated program updates never do). A test checks this; after changing anything in
+`extension/` bump `version` in `extension/manifest.json` and run `python3 tools/extension_version.py stamp`.
+
 `extension/rules.json` must be a copy of `rules.json` (a test checks it): `cp rules.json extension/rules.json`.

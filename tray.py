@@ -100,11 +100,18 @@ TEXT = {
     'events_clear': ('Clear messages', 'Meldungen leeren'),
     'events_copy': ('Copy all', 'Alle kopieren'),
     'problem': ('URL Trackbye: problem', 'URL Trackbye: Problem'),
-    'ext_ok': ('Extension: up to date ({v})', 'Erweiterung: aktuell ({v})'),
+    'ext_installed': ('Version in the browser:', 'Version im Browser:'),
+    'ext_current': ('Current version:', 'Aktuelle Version:'),
+    'ext_state': ('Status:', 'Status:'),
+    'ext_ok': ('up to date', 'aktuell'),
+    'ext_none': ('unknown', 'unbekannt'),
     'ext_old': ('Extension is outdated: the browser runs {r}, available is {a}. Reload it on the extensions page (it also reloads itself within about 30 minutes).',
                 'Erweiterung veraltet: Der Browser nutzt {r}, verfügbar ist {a}. Auf der Erweiterungsseite neu laden (sie lädt sich auch selbst innerhalb von etwa 30 Minuten neu).'),
-    'ext_unknown': ('Extension: no contact yet (not loaded, or the rule sharing below is not set up)',
-                    'Erweiterung: noch kein Kontakt (nicht geladen oder die Regel-Anbindung unten nicht eingerichtet)'),
+    'ext_old_short': ('outdated: reload it on the extensions page', 'veraltet: auf der Erweiterungsseite neu laden'),
+    'ext_unknown': ('no contact yet (not loaded, or the rule sharing below is not set up)',
+                    'noch kein Kontakt (nicht geladen oder die Regel-Anbindung unten nicht eingerichtet)'),
+    'ext_note': ('The version only changes when the extension itself changed; program updates that do not touch it never ask you to reload it.',
+                 'Die Version ändert sich nur, wenn die Erweiterung selbst geändert wurde; Programm-Updates ohne Änderung daran verlangen kein Neuladen.'),
     'ext_older': ('an older version', 'eine ältere Version'),
     'ext_page': ('Open the extensions page', 'Erweiterungsseite öffnen'),
     'ext_notice_title': ('URL Trackbye: update the extension', 'URL Trackbye: Erweiterung aktualisieren'),
@@ -490,9 +497,19 @@ class SettingsWindow(QWidget):
         row_ext.addWidget(page_btn)
         row_ext.addStretch(1)
         box.addLayout(row_ext)
-        self.ext_status = QLabel('')
-        self.ext_status.setWordWrap(True)
-        box.addWidget(self.ext_status)
+        form = QFormLayout()
+        self.ext_installed = QLabel('')
+        self.ext_current = QLabel('')
+        self.ext_state = QLabel('')
+        self.ext_state.setWordWrap(True)
+        form.addRow(t('ext_installed'), self.ext_installed)
+        form.addRow(t('ext_current'), self.ext_current)
+        form.addRow(t('ext_state'), self.ext_state)
+        box.addLayout(form)
+        note = QLabel(t('ext_note'))
+        note.setWordWrap(True)
+        note.setStyleSheet('color: gray')
+        box.addWidget(note)
 
         box.addWidget(self.heading(t('native_head')))
         self.native = QTableWidget(len(tb.NATIVE_BROWSERS), 3)
@@ -541,16 +558,20 @@ class SettingsWindow(QWidget):
 
     def refresh_ext_status(self):
         state = tb.read_json(tb.EXTENSION_STATE, {})
+        current = tb.extension_version() or t('ext_none')
         outdated = tb.extension_outdated()
-        if outdated:
-            self.ext_status.setText(t('ext_old', r=outdated[0] or t('ext_older'), a=outdated[1]))
-            self.ext_status.setStyleSheet('color: #c0392b')
-        elif state:
-            self.ext_status.setText(t('ext_ok', v=state.get('version') or '?'))
-            self.ext_status.setStyleSheet('')
+        self.ext_current.setText(current)
+        self.ext_state.setStyleSheet('')
+        if not state:
+            self.ext_installed.setText(t('ext_none'))
+            self.ext_state.setText(t('ext_unknown'))
+        elif outdated:
+            self.ext_installed.setText(outdated[0] or t('ext_older'))
+            self.ext_state.setText(t('ext_old_short'))
+            self.ext_state.setStyleSheet('color: #c0392b')
         else:
-            self.ext_status.setText(t('ext_unknown'))
-            self.ext_status.setStyleSheet('')
+            self.ext_installed.setText(state.get('version') or t('ext_none'))
+            self.ext_state.setText(t('ext_ok'))
 
     def refresh_browser_tab(self):
         self.refresh_ext_status()
