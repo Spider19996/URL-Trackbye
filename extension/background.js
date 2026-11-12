@@ -1,13 +1,13 @@
 import { cleanUrl } from './cleaner.js';
 
-const HOST = 'de.linkbroom.host';
+const HOST = 'de.trackbye.host';
 const DEFAULT_SETTINGS = { enabled: true, disabledSites: [] };
 
 async function getSettings() {
   return Object.assign({}, DEFAULT_SETTINGS, await chrome.storage.local.get(DEFAULT_SETTINGS));
 }
 
-// Rules from the linkbroom program if it is installed (they include your own additions), else the bundled copy.
+// Rules from the trackbye program if it is installed (they include your own additions), else the bundled copy.
 async function loadRules() {
   try {
     const reply = await chrome.runtime.sendNativeMessage(HOST, { type: 'rules' });

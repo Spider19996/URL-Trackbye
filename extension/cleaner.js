@@ -1,4 +1,4 @@
-// The same cleaning logic as linkbroom.py (kept in sync by tests/test_parity.js).
+// The same cleaning logic as trackbye.py (kept in sync by tests/test_parity.js).
 
 export function hostMatches(host, domains) {
   return domains.some((d) => host === d || host.endsWith('.' + d));
