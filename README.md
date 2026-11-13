@@ -76,9 +76,15 @@ copies marked by a password manager are never touched.
 
 ### Firefox
 
+Chrome-like browsers load `extension/` (its manifest is the Chrome one). Firefox gets its own manifest from the
+packager: `python3 tools/package_extension.py` writes `dist/firefox-unpacked/` (for "Load Temporary Add-on"), the
+store zips, and `tools/sign_firefox.py` the signed `.xpi`. The extension reloads itself on request (new version on disk,
+`trackbye reload-extension`) only when it is an unpacked/temporary install; an installed, signed one never does.
+
 The same extension folder works in Firefox 128+ (one code base for both browsers):
 
-1. Open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on** and choose `extension/manifest.json`.
+1. Open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on** and choose
+   `dist/firefox-unpacked/manifest.json` (create it with `python3 tools/package_extension.py`).
    Firefox removes temporary add-ons when it closes. For a permanent install the add-on has to be signed by Mozilla
    (free: upload it as "unlisted" on addons.mozilla.org); unsigned add-ons only stay in Developer Edition / ESR /
    Nightly with `xpinstall.signatures.required` set to `false`.
