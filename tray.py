@@ -71,7 +71,10 @@ TEXT = {
     'native_head': ('Share the rules with the extension (native messaging)', 'Regeln mit der Erweiterung teilen (Native Messaging)'),
     'col_browser': ('Browser', 'Browser'),
     'col_found': ('Found', 'Gefunden'),
-    'col_reg': ('Registered', 'Eingerichtet'),
+    'conn_active': ('connected ✓', 'verbunden ✓'),
+    'conn_setup': ('set up', 'eingerichtet'),
+    'col_reg': ('Connection',
+    'Verbindung'),
     'register': ('Apply', 'Übernehmen'),
     'col_ext': ('Extension', 'Erweiterung'),
     'ext_no_contact': ('No contact yet: the extension is not loaded in this browser, or the link to the program is not set up.', 'Noch kein Kontakt: Die Erweiterung ist in diesem Browser nicht geladen oder die Verbindung zum Programm ist nicht eingerichtet.'),
@@ -1043,10 +1046,20 @@ class SettingsWindow(QWidget):
             first.setCheckState(Qt.CheckState.Checked if wanted else Qt.CheckState.Unchecked)
             first.setToolTip(os.path.expanduser(entry['dir']))
             self.native.setItem(i, 0, first)
-            for column, flag in ((1, found), (2, registered)):
-                item = QTableWidgetItem(t('yes') if flag else t('no'))
-                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
-                self.native.setItem(i, column, item)
+            item = QTableWidgetItem(t('yes') if found else t('no'))
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            self.native.setItem(i, 1, item)
+            # connection: "connected" = the extension reported itself recently, "set up" = the link file is there,
+            # but nothing was heard yet (extension not loaded, or the browser not restarted)
+            if not registered:
+                conn = QTableWidgetItem(t('no'))
+            elif entry['id'] in versions:
+                conn = QTableWidgetItem(t('conn_active'))
+                conn.setForeground(QColor('#1e8449'))
+            else:
+                conn = QTableWidgetItem(t('conn_setup'))
+            conn.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            self.native.setItem(i, 2, conn)
             version_item = QTableWidgetItem()
             version_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
             running = versions.get(entry['id'])
