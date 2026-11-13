@@ -3,3 +3,9 @@ __pycache__/
 .eslintcache
 node_modules/
 dist/
+*.xpi
+*.pem
+.env
+.env.*
+amo-credentials*
+*credentials*.json

@@ -97,6 +97,19 @@ automatically after a short check; download the `.xpi` and open it in Firefox (F
 window). Every new extension version needs a new upload (the version number must be higher). Needs a free Mozilla
 account; nothing is published.
 
+#### Automatic signing (maintainer)
+
+`python3 tools/sign_firefox.py` uploads the Firefox build to Mozilla (unlisted, nothing is published), waits for the
+signature and saves `dist/url-trackbye-<version>.xpi`. Open that file in Firefox to install it for good.
+
+Your Mozilla API key (https://addons.mozilla.org/developers/addon/api/key/) is never part of this repository:
+it is read from `~/.config/trackbye/amo-credentials.json` (outside the project, `chmod 600`, the tool refuses a file that
+others can read) or from the environment variables `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`. `.gitignore` excludes
+credential files, `*.xpi` and `dist/`; a commit hook (`.githooks/pre-commit`, enabled with
+`git config core.hooksPath .githooks`) and a test refuse anything that looks like an API key.
+`--dry-run` checks the credentials and the package without sending anything. A version can only be signed once: raise
+`version` in `extension/manifest.json` (and run `tools/extension_version.py stamp`) before the next signing.
+
 #### Other browsers
 
 Microsoft Edge, Opera, Floorp, LibreWolf, Zen and Waterfox show up in the app's Browser page by themselves once they
