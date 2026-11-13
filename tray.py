@@ -291,6 +291,24 @@ class ClipboardService:
 # Settings window
 # --------------------------------------------------------------------------------------------------------------
 
+class InfoDialog(QDialog):
+    """A message that is always shown in full (QMessageBox cuts long texts off)."""
+
+    def __init__(self, parent, text):
+        super().__init__(parent)
+        self.setWindowTitle(t('title'))
+        self.setMinimumWidth(560)
+        box = QVBoxLayout(self)
+        label = QLabel(text)
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        box.addWidget(label)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(self.accept)
+        box.addWidget(buttons)
+        self.adjustSize()
+
+
 class AddBrowserDialog(QDialog):
     """Add a browser the app does not know. Only name and family are asked; the folder is found automatically."""
 
@@ -947,6 +965,7 @@ class SettingsWindow(QWidget):
                   if self.native.item(i, 0).checkState() == Qt.CheckState.Checked]
         entries = [e for e in tb.browser_entries() if e['id'] in wanted]
         notes = []
+        chromium_names = []
         for entry in entries:
             binary = tb.browser_binary(entry)
             if not binary:
@@ -962,10 +981,12 @@ class SettingsWindow(QWidget):
             else:
                 scheme = 'vivaldi' if 'vivaldi' in binary else 'edge' if 'edge' in binary else 'opera' if binary == 'opera' else 'chrome'
                 QProcess.startDetached(binary, [scheme + '://extensions'])
-                notes.append(entry['name'] + ': ' + t('chromium_steps'))
+                chromium_names.append(entry['name'])
+        if chromium_names:
+            notes.append(', '.join(chromium_names) + ': ' + t('chromium_steps'))
         if any(e['kind'] == 'chromium' for e in entries):
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.join(tb.HERE, 'extension')))
-        QMessageBox.information(self, t('title'), '\n\n'.join(notes) if notes else t('tick_first'))
+        InfoDialog(self, '\n\n'.join(notes) if notes else t('tick_first')).exec()
 
     def open_extensions_page(self):
         browser = tb.load_config()['browser']
