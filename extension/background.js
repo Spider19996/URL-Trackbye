@@ -26,10 +26,13 @@ function setIconState(enabled) {
   chrome.action.setTitle({ title: enabled ? 'URL Trackbye' : 'URL Trackbye (off)' });
 }
 
+let logRules = null; // what the Firefox fallback logging needs: the active rules and the sites switched off
+
 async function applyRules() {
   const settings = await getSettings();
   setIconState(settings.enabled);
   const { rules, source } = await loadRules();
+  logRules = settings.enabled ? { rules, disabledSites: settings.disabledSites } : null;
   const add = settings.enabled ? buildRules(rules, settings.disabledSites) : [];
   try {
     const old = await chrome.declarativeNetRequest.getDynamicRules();
@@ -69,6 +72,16 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
   chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
     if (info.request && info.request.type === 'main_frame') reportToLog('browser', info.request.url);
   });
+} else if (chrome.webRequest && chrome.webRequest.onBeforeRequest) {
+  // Firefox has no match events: watch the original request (without changing it) and report links that carry
+  // tracking parts. The rules from the last applyRules() tell what the cleaning will remove.
+  chrome.webRequest.onBeforeRequest.addListener((details) => {
+    if (!logRules) return;
+    let host = '';
+    try { host = new URL(details.url).hostname; } catch (e) { return; }
+    if (logRules.disabledSites.includes(host)) return;
+    if (cleanUrl(details.url, logRules.rules) !== details.url) reportToLog('browser', details.url);
+  }, { urls: ['http://*/*', 'https://*/*'], types: ['main_frame'] });
 }
 
 // Context menu: copy the address of a link without tracking parameters.

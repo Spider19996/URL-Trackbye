@@ -25,6 +25,7 @@ def manifests():
     firefox.pop('minimum_chrome_version', None)
     firefox['background'] = {'scripts': ['background.js'], 'type': 'module'}
     firefox['browser_specific_settings']['gecko']['data_collection_permissions'] = {'required': ['none']}
+    firefox['browser_specific_settings']['gecko_android'] = {'strict_min_version': '142.0'}
     chrome = json.loads(json.dumps(base))
     chrome.pop('browser_specific_settings', None)
     chrome['background'] = {'service_worker': 'background.js', 'type': 'module'}
