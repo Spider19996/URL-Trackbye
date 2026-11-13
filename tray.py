@@ -124,8 +124,8 @@ TEXT = {
     'restore_default': ('Restore previous default browser', 'Vorherigen Standardbrowser wiederherstellen'),
     'confirm_default': ('Make URL Trackbye your default browser? You can restore the previous one here at any time.',
                         'URL Trackbye als Standardbrowser festlegen? Den vorherigen kannst du hier jederzeit wiederherstellen.'),
-    'about': ('Removes tracking parameters from links: in the clipboard, in links opened by other apps and in the browser (extension).\nFree software under the GNU GPL v3.',
-              'Entfernt Tracking-Parameter aus Links: in der Zwischenablage, in Links aus anderen Programmen und im Browser (Erweiterung).\nFreie Software unter der GNU GPL v3.'),
+    'about': ('Removes tracking parameters from links: in the clipboard, in links opened by other apps and in the browser (extension).\nFree software under the GNU GPL v3. Contains tracking parameter names from ClearURLs (LGPL-3.0, see NOTICE.md).',
+              'Entfernt Tracking-Parameter aus Links: in der Zwischenablage, in Links aus anderen Programmen und im Browser (Erweiterung).\nFreie Software unter der GNU GPL v3. Enthält Tracking-Parameter-Namen von ClearURLs (LGPL-3.0, siehe NOTICE.md).'),
     'tab_log': ('Cleaned links', 'Gesäuberte Links'),
     'tray_icon': ('Show the tray icon (if hidden: start URL Trackbye again or use the application menu entry to open this window)',
                   'Tray-Symbol anzeigen (wenn ausgeblendet: URL Trackbye erneut starten oder den Eintrag im Anwendungsmenü nutzen)'),
@@ -603,7 +603,7 @@ class SettingsWindow(QWidget):
         if not tb.is_url(text):
             self.try_out.setText('')
             return
-        builtin = tb.read_json(os.path.join(tb.HERE, 'rules.json'), {})
+        builtin = tb.builtin_rules()
         mine = self.editor_rules()
         merged = {k: list(builtin.get(k, [])) + list(mine[k]) for k in ('exclude_hosts', 'global_remove', 'sites')}
         self.try_out.setText(tb.clean_url(text, merged))
@@ -626,7 +626,7 @@ class SettingsWindow(QWidget):
         self.try_in.textChanged.emit(self.try_in.text())
 
     def show_builtin(self):
-        r = tb.read_json(os.path.join(tb.HERE, 'rules.json'), {})
+        r = tb.builtin_rules()
         text = 'Everywhere:\n  ' + ', '.join(r.get('global_remove', [])) + '\n\nNever changed:\n  ' + ', '.join(r.get('exclude_hosts', []))
         for s in r.get('sites', []):
             text += '\n\n' + s.get('name', '') + ' (' + ', '.join(s['hosts']) + '):\n  ' + ', '.join(s['remove'])

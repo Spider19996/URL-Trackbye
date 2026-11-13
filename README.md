@@ -156,6 +156,14 @@ Nightly and ESR can install unsigned extensions for good if you set `xpinstall.s
 Set `"browser"` in `~/.config/trackbye/config.json` if your browser is not `vivaldi-stable`. Undo with
 `xdg-settings set default-web-browser vivaldi-stable.desktop`.
 
+## Rules and where they come from
+
+The built-in rules are `rules.json` (hand-written: Google, YouTube, Amazon, ...) plus `rules.clearurls.json`: tracking
+parameter names converted from the [ClearURLs](https://github.com/ClearURLs/Rules) rules database (LGPL-3.0, see
+[NOTICE.md](NOTICE.md)). The importer `tools/import_clearurls.py` only takes what is safe as an exact name
+(no regular expressions, no providers with exceptions, not names pages often need such as `ref` or `source`) and checks the
+published hash before using the download. `extension/rules.json` is the combined copy the extension carries.
+
 ## Your own rules
 
 `~/.config/trackbye/rules.json` is merged with the built-in rules (same format):

@@ -70,9 +70,22 @@ def read_json(path, fallback, report=False):
         return fallback
 
 
+def builtin_rules():
+    """The rules that ship with the program: our own rules.json plus the converted ClearURLs names (rules.clearurls.json,
+    LGPL-3.0, see NOTICE.md). Lists are united without duplicates; our own entries come first."""
+    own = read_json(os.path.join(HERE, 'rules.json'), {}, True)
+    community = read_json(os.path.join(HERE, 'rules.clearurls.json'), {}, True)
+    return {
+        'version': own.get('version', 1),
+        'exclude_hosts': list(own.get('exclude_hosts', [])),
+        'global_remove': list(dict.fromkeys(list(own.get('global_remove', [])) + list(community.get('global_remove', [])))),
+        'sites': list(own.get('sites', [])) + list(community.get('sites', [])),
+    }
+
+
 def load_rules():
     """Built-in rules plus the user's additions (union of lists, user sites appended)."""
-    rules = read_json(os.path.join(HERE, 'rules.json'), {}, True)
+    rules = builtin_rules()
     user = read_json(os.path.join(CONFIG_DIR, 'rules.json'), {}, True)
     return {
         'version': rules.get('version', 1),

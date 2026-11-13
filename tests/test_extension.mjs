@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { cleanUrl } from '../extension/cleaner.js';
 
-const rules = JSON.parse(readFileSync(new URL('../rules.json', import.meta.url)));
+const rules = JSON.parse(readFileSync(new URL('../extension/rules.json', import.meta.url)));
 const vectors = JSON.parse(readFileSync(new URL('./vectors.json', import.meta.url)));
 for (const [given, expected] of vectors) assert.equal(cleanUrl(given, rules), expected, given);
 console.log('extension cleaner: ' + vectors.length + ' vectors OK');
@@ -25,4 +25,5 @@ for (const site of rules.sites) {
     assert.ok(hit.length >= 1, 'site parameter not covered: ' + site.name + ' ' + name);
   }
 }
+assert.ok(built.length < 600, 'too many rules for the browser: ' + built.length);
 console.log('extension rules: ' + built.length + ' rules (max ' + CHUNK + ' names each) OK');
