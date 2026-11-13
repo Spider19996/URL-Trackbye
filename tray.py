@@ -234,6 +234,8 @@ TEXT = {
     'min_ago': ('{n} min ago', 'vor {n} Min.'),
     'h_ago': ('{n} h ago', 'vor {n} Std.'),
     'd_ago': ('{n} d ago', 'vor {n} Tg.'),
+    'open_repo': ('Open the project page on GitHub', 'Projektseite auf GitHub öffnen'),
+    'repo_text': ('Source code, updates and bug reports:', 'Quellcode, Updates und Fehlermeldungen:'),
     'show_builtin': ('Show the rules in use', 'Verwendete Regeln anzeigen'),
 }
 LANG = 1 if QLocale.system().name().startswith('de') else 0
@@ -1305,6 +1307,12 @@ class SettingsWindow(QWidget):
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         box.addWidget(text)
+        link = QLabel('<a href="%s">%s</a>' % (tb.REPO_URL, tb.REPO_URL.replace('https://', '')))
+        link.setTextFormat(Qt.TextFormat.RichText)
+        link.setOpenExternalLinks(True)
+        link.setToolTip(t('open_repo'))
+        box.addWidget(QLabel(t('repo_text')))
+        box.addWidget(link)
         box.addStretch(1)
         return page
 
@@ -1367,7 +1375,8 @@ class TrayApp:
         """Tray (right click) menu: the quick settings you picked, then Settings and Quit, with icons."""
         menu = QMenu()
         title = QAction(QIcon(ICON), 'URL Trackbye ' + tb.VERSION, menu)  # parent keeps the action alive
-        title.setEnabled(False)
+        title.setToolTip(t('open_repo'))
+        title.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(tb.REPO_URL)))  # opens the project page
         menu.addAction(title)
         menu.addSeparator()
         quick = tb.load_config()['quick']

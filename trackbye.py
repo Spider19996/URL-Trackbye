@@ -78,6 +78,7 @@ def read_json(path, fallback, report=False):
 # The rule list: a small list ships with the program (offline fallback); a larger one is built outside of it
 # (hand-written rules + ClearURLs names, see tools/build_rules.py), published, and downloaded by the program.
 # --------------------------------------------------------------------------------------------------------------
+REPO_URL = 'https://github.com/Spider19996/URL-Trackbye'
 DEFAULT_RULES_URL = 'https://raw.githubusercontent.com/Spider19996/URL-Trackbye/rules/rules.json'
 RULES_DOWNLOADED = os.path.join(CONFIG_DIR, 'rules.downloaded.json')
 RULES_META = os.path.join(CONFIG_DIR, 'rules.meta.json')
