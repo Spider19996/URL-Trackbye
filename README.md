@@ -99,9 +99,14 @@ account; nothing is published.
 
 #### Other browsers
 
-The app's Browser page has **Add browser...** for browsers it does not know (Floorp, LibreWolf, Zen, Edge, Opera, ...):
-give a name, say whether it is Firefox- or Chromium-based and confirm the folder where it looks for native messaging
-files (the suggestion fits most). You still load the extension in that browser yourself.
+Microsoft Edge, Opera, Floorp, LibreWolf, Zen and Waterfox show up in the app's Browser page by themselves once they
+are installed. For any other browser use **Add browser...**: type its name and pick whether it is based on Firefox or
+Chrome/Chromium. The app finds the right folder (or lets you choose one). You still load the extension in that browser
+yourself.
+
+Without signing, Firefox only keeps the extension until it closes (about:debugging). Firefox Developer Edition,
+Nightly and ESR can install unsigned extensions for good if you set `xpinstall.signatures.required` to `false` in
+`about:config`; the normal release version ignores that setting.
 
 ### Links from other apps (Discord, ...)
 

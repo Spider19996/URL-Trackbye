@@ -370,27 +370,65 @@ FIREFOX_ID = 'url-trackbye@spider19996'  # must match browser_specific_settings 
 # Browsers the app knows. "dir" is where the browser looks for native messaging host files, "detect" tells whether
 # the browser is installed. Chromium-like browsers want the extension origin, Firefox-like ones the add-on id.
 BUILTIN_BROWSERS = [
-    {'id': 'vivaldi', 'name': 'Vivaldi', 'kind': 'chromium', 'dir': '~/.config/vivaldi/NativeMessagingHosts', 'detect': '~/.config/vivaldi'},
-    {'id': 'chromium', 'name': 'Chromium', 'kind': 'chromium', 'dir': '~/.config/chromium/NativeMessagingHosts', 'detect': '~/.config/chromium'},
-    {'id': 'google-chrome', 'name': 'Google Chrome', 'kind': 'chromium', 'dir': '~/.config/google-chrome/NativeMessagingHosts', 'detect': '~/.config/google-chrome'},
+    {'id': 'vivaldi', 'name': 'Vivaldi', 'kind': 'chromium', 'dir': '~/.config/vivaldi/NativeMessagingHosts',
+     'detect': '~/.config/vivaldi', 'bins': ['vivaldi-stable', 'vivaldi']},
+    {'id': 'chromium', 'name': 'Chromium', 'kind': 'chromium', 'dir': '~/.config/chromium/NativeMessagingHosts',
+     'detect': '~/.config/chromium', 'bins': ['chromium', 'chromium-browser']},
+    {'id': 'google-chrome', 'name': 'Google Chrome', 'kind': 'chromium', 'dir': '~/.config/google-chrome/NativeMessagingHosts',
+     'detect': '~/.config/google-chrome', 'bins': ['google-chrome-stable', 'google-chrome']},
     {'id': 'BraveSoftware/Brave-Browser', 'name': 'Brave', 'kind': 'chromium',
-     'dir': '~/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts', 'detect': '~/.config/BraveSoftware/Brave-Browser'},
-    {'id': 'firefox', 'name': 'Firefox', 'kind': 'firefox', 'dir': '~/.mozilla/native-messaging-hosts', 'detect': '~/.mozilla/firefox'},
+     'dir': '~/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts', 'detect': '~/.config/BraveSoftware/Brave-Browser',
+     'bins': ['brave-browser', 'brave']},
+    {'id': 'firefox', 'name': 'Firefox', 'kind': 'firefox', 'dir': '~/.mozilla/native-messaging-hosts',
+     'detect': '~/.mozilla/firefox', 'bins': ['firefox', 'firefox-esr']},
+]
+
+# Well-known derivatives: they show up in the list by themselves as soon as they are installed, no setup needed.
+# (Their folders follow the usual pattern of each family; not every one has been tried.)
+DERIVATIVES = [
+    {'id': 'microsoft-edge', 'name': 'Microsoft Edge', 'kind': 'chromium', 'dir': '~/.config/microsoft-edge/NativeMessagingHosts',
+     'detect': '~/.config/microsoft-edge', 'bins': ['microsoft-edge-stable', 'microsoft-edge']},
+    {'id': 'opera', 'name': 'Opera', 'kind': 'chromium', 'dir': '~/.config/opera/NativeMessagingHosts',
+     'detect': '~/.config/opera', 'bins': ['opera']},
+    {'id': 'floorp', 'name': 'Floorp', 'kind': 'firefox', 'dir': '~/.floorp/native-messaging-hosts',
+     'detect': '~/.floorp', 'bins': ['floorp']},
+    {'id': 'librewolf', 'name': 'LibreWolf', 'kind': 'firefox', 'dir': '~/.librewolf/native-messaging-hosts',
+     'detect': '~/.librewolf', 'bins': ['librewolf']},
+    {'id': 'zen', 'name': 'Zen Browser', 'kind': 'firefox', 'dir': '~/.zen/native-messaging-hosts',
+     'detect': '~/.zen', 'bins': ['zen-browser', 'zen']},
+    {'id': 'waterfox', 'name': 'Waterfox', 'kind': 'firefox', 'dir': '~/.waterfox/native-messaging-hosts',
+     'detect': '~/.waterfox', 'bins': ['waterfox']},
 ]
 
 
 def browser_entries():
-    """Built-in browsers plus the ones the user added (config "custom_browsers": name, kind, dir)."""
+    """Built-in browsers, installed derivatives, and the ones the user added (config "custom_browsers")."""
     entries = [dict(b) for b in BUILTIN_BROWSERS]
+    entries += [dict(d) for d in DERIVATIVES if browser_found(d)]
     for c in load_config().get('custom_browsers') or []:
         entries.append({'id': 'custom:' + c['name'], 'name': c['name'], 'kind': c['kind'], 'dir': c['dir'],
-                        'detect': c['dir'], 'custom': True})
+                        'detect': c['dir'], 'bins': [], 'custom': True})
     return entries
 
 
 def browser_found(entry):
+    """Installed? Its program is on the PATH or its profile folder exists (Firefox has none before its first start)."""
+    if any(shutil.which(b) for b in entry.get('bins', [])):
+        return True
     path = os.path.expanduser(entry['detect'])
-    return os.path.isdir(path) or (entry.get('custom') and os.path.isdir(os.path.dirname(path.rstrip('/'))))
+    return os.path.isdir(path) or bool(entry.get('custom') and os.path.isdir(os.path.dirname(path.rstrip('/'))))
+
+
+def suggest_native_dir(name, kind):
+    """For the "add browser" dialog: (folder, profile found?) guessed from the browser's name and family."""
+    slug = ''.join(c for c in name.lower() if c.isalnum() or c == '-') or 'browser'
+    if kind == 'firefox':
+        for base in ('~/.' + slug, '~/.config/' + slug):
+            if os.path.isdir(os.path.expanduser(base)):
+                return base + '/native-messaging-hosts', True
+        return '~/.mozilla/native-messaging-hosts', False
+    base = '~/.config/' + slug
+    return base + '/NativeMessagingHosts', os.path.isdir(os.path.expanduser(base))
 
 
 def native_manifest_path(entry):

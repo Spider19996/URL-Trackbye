@@ -77,13 +77,14 @@ TEXT = {
     'remove_browser': ('Remove selected', 'Auswahl entfernen'),
     'custom_tag': ('(added)', '(hinzugefügt)'),
     'remove_builtin': ('Only browsers you added yourself can be removed. Untick the others instead.', 'Nur selbst hinzugefügte Browser lassen sich entfernen. Bei den anderen einfach den Haken entfernen.'),
-    'browser_name': ('Name', 'Name'),
-    'browser_kind': ('Based on', 'Basiert auf'),
-    'browser_folder': ('Link folder', 'Verbindungs-Ordner'),
+    'browser_name': ('Name of the browser', 'Name des Browsers'),
+    'browser_name_ph': ('e.g. Floorp', 'z. B. Floorp'),
+    'browser_kind': ('It is based on', 'Er basiert auf'),
     'kind_firefox': ('Firefox (Floorp, LibreWolf, Zen, Waterfox, …)', 'Firefox (Floorp, LibreWolf, Zen, Waterfox, …)'),
-    'kind_chromium': ('Chromium (Edge, Opera, Brave, …)', 'Chromium (Edge, Opera, Brave, …)'),
-    'add_browser_hint': ('The link folder is where this browser looks for native messaging files; the suggestion fits most browsers. You still load the extension in that browser yourself (the same folder, in its extensions page).',
-                         'Im Verbindungs-Ordner sucht der Browser nach Native-Messaging-Dateien; der Vorschlag passt für die meisten Browser. Die Erweiterung lädst du im jeweiligen Browser weiterhin selbst (derselbe Ordner, auf dessen Erweiterungsseite).'),
+    'kind_chromium': ('Chrome / Chromium (Edge, Opera, Brave, …)', 'Chrome / Chromium (Edge, Opera, Brave, …)'),
+    'folder_found': ('Found the browser folder: {d}', 'Browser-Ordner gefunden: {d}'),
+    'folder_default': ('No folder of this name found, the usual one is used: {d}', 'Kein Ordner mit diesem Namen gefunden, es wird der übliche verwendet: {d}'),
+    'change_folder': ('Choose another folder…', 'Anderen Ordner wählen …'),
     'native_hint': ('Tick the browsers whose extension should get the rules from this program. Unticking removes the link again.', 'Hake die Browser an, deren Erweiterung die Regeln von diesem Programm bekommen soll. Entfernst du den Haken, wird die Verbindung wieder gelöscht.'),
     'yes': ('yes', 'ja'),
     'no': ('no', 'nein'),
@@ -282,32 +283,27 @@ class ClipboardService:
 # --------------------------------------------------------------------------------------------------------------
 
 class AddBrowserDialog(QDialog):
-    """Add a browser the app does not know: its name, whether it is Chromium- or Firefox-based, and the folder where
-    it looks for native messaging files (suggested from the type)."""
+    """Add a browser the app does not know. Only name and family are asked; the folder is found automatically."""
 
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle(t('add_browser'))
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(500)
         form = QFormLayout(self)
         self.name = QLineEdit()
-        self.name.setPlaceholderText('Floorp')
+        self.name.setPlaceholderText(t('browser_name_ph'))
         self.kind = QComboBox()
         self.kind.addItem(t('kind_firefox'), 'firefox')
         self.kind.addItem(t('kind_chromium'), 'chromium')
-        self.folder = QLineEdit()
-        pick = QPushButton(QIcon.fromTheme('folder-open'), '')
-        pick.clicked.connect(self.browse)
-        row = QHBoxLayout()
-        row.addWidget(self.folder, 1)
-        row.addWidget(pick)
-        hint = QLabel(t('add_browser_hint'))
-        hint.setWordWrap(True)
-        hint.setStyleSheet('color: gray')
+        self.found = QLabel('')
+        self.found.setWordWrap(True)
+        self.folder = ''
+        change = QPushButton(QIcon.fromTheme('folder-open'), t('change_folder'))
+        change.clicked.connect(self.browse)
         form.addRow(t('browser_name'), self.name)
         form.addRow(t('browser_kind'), self.kind)
-        form.addRow(t('browser_folder'), row)
-        form.addRow(hint)
+        form.addRow(self.found)
+        form.addRow(change)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -317,23 +313,27 @@ class AddBrowserDialog(QDialog):
         self.suggest()
 
     def suggest(self, *_):
-        if self.kind.currentData() == 'firefox':
-            self.folder.setText('~/.mozilla/native-messaging-hosts')
+        self.folder, profile = tb.suggest_native_dir(self.name.text().strip(), self.kind.currentData())
+        if profile:
+            self.found.setText(t('folder_found', d=os.path.expanduser(self.folder)))
+            self.found.setStyleSheet('color: #1e8449')
         else:
-            self.folder.setText('~/.config/' + (self.name.text().strip().lower() or 'browser') + '/NativeMessagingHosts')
+            self.found.setText(t('folder_default', d=os.path.expanduser(self.folder)))
+            self.found.setStyleSheet('color: gray')
 
     def browse(self):
-        chosen = QFileDialog.getExistingDirectory(self, t('browser_folder'), os.path.expanduser('~'))
+        chosen = QFileDialog.getExistingDirectory(self, t('change_folder'), os.path.expanduser('~'))
         if chosen:
-            self.folder.setText(chosen)
+            self.folder = chosen
+            self.found.setText(t('folder_found', d=chosen))
+            self.found.setStyleSheet('color: #1e8449')
 
     def accept(self):
-        if not self.name.text().strip() or not self.folder.text().strip():
-            return
-        super().accept()
+        if self.name.text().strip():
+            super().accept()
 
     def result_entry(self):
-        return {'name': self.name.text().strip(), 'kind': self.kind.currentData(), 'dir': self.folder.text().strip()}
+        return {'name': self.name.text().strip(), 'kind': self.kind.currentData(), 'dir': self.folder}
 
 
 class SettingsWindow(QWidget):
