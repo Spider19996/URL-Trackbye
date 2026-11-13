@@ -809,9 +809,10 @@ class SettingsWindow(QWidget):
         header = self.native.horizontalHeader()
         header.setStretchLastSection(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        widths = (240, 100, 120)  # fixed width: the table does not stretch over the whole page
+        for column, width in enumerate(widths):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
+            self.native.setColumnWidth(column, width)
         self.native.verticalHeader().setVisible(False)
         self.native.verticalHeader().setDefaultSectionSize(30)
         self.native.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -821,13 +822,14 @@ class SettingsWindow(QWidget):
         self.native.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         # exactly as high as its rows, so it has no scrollbar of its own
         self.native.setFixedHeight(header.height() + 30 * len(tb.NATIVE_BROWSERS) + 4)
+        self.native.setFixedWidth(sum(widths) + 4)
         for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
             item = QTableWidgetItem(name)
             item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
             self.native.setItem(i, 0, item)
             self.native.setItem(i, 1, QTableWidgetItem(''))
             self.native.setItem(i, 2, QTableWidgetItem(''))
-        l_nat.addWidget(self.native)
+        l_nat.addWidget(self.native, alignment=Qt.AlignmentFlag.AlignLeft)
         reg = QPushButton(QIcon.fromTheme('dialog-ok-apply'), t('register'))
         reg.clicked.connect(self.register_native)
         l_nat.addWidget(reg, alignment=Qt.AlignmentFlag.AlignLeft)
