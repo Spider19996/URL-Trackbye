@@ -80,8 +80,12 @@ TEXT = {
     'no_binary': ('the program could not be found.', 'das Programm wurde nicht gefunden.'),
     'xpi_opened': ('the signed extension was opened; confirm "Add" in the window that appears in Firefox.',
                    'die signierte Erweiterung wurde geöffnet; bestätige in Firefox im erscheinenden Fenster "Hinzufügen".'),
-    'no_xpi': ('there is no signed package yet (tools/sign_firefox.py creates it). The debugging page was opened instead: "Load Temporary Add-on", then choose manifest.json in the extension folder (it stays until Firefox closes).',
-               'es gibt noch kein signiertes Paket (tools/sign_firefox.py erstellt es). Stattdessen wurde die Debugging-Seite geöffnet: "Temporäres Add-on laden" und die manifest.json im Erweiterungsordner wählen (gilt bis Firefox geschlossen wird).'),
+    'no_xpi': ('there is no signed package yet (tools/sign_firefox.py creates it). The debugging page was opened instead: "Load Temporary Add-on", then choose manifest.json in {d} (it stays until Firefox closes).',
+               'es gibt noch kein signiertes Paket (tools/sign_firefox.py erstellt es). Stattdessen wurde die Debugging-Seite geöffnet: "Temporäres Add-on laden" und die manifest.json in {d} wählen (gilt bis Firefox geschlossen wird).'),
+    'tip_apply': ('Sets up (ticked) or removes (unticked) the link between the browser and this program. With the link the extension uses your rules, fills the log and statistics, and can open these settings. It does NOT install the extension.',
+                  'Richtet die Verbindung zwischen Browser und diesem Programm ein (Haken) oder löscht sie (kein Haken). Mit der Verbindung nutzt die Erweiterung deine Regeln, füllt Protokoll und Statistik und kann diese Einstellungen öffnen. Sie installiert die Erweiterung NICHT.'),
+    'tip_install': ('Starts the installation of the extension in the ticked browsers: Firefox-like browsers open the signed package (you confirm "Add"), Chrome-like ones open their extensions page and the folder (you load it there once). Changes nothing else.',
+                    'Startet die Installation der Erweiterung in den angehakten Browsern: Firefox-artige öffnen das signierte Paket (du bestätigst "Hinzufügen"), Chrome-artige öffnen ihre Erweiterungsseite und den Ordner (dort lädst du sie einmal). Ändert sonst nichts.'),
     'chromium_steps': ('the extensions page and the extension folder were opened. Switch on "Developer mode", click "Load unpacked" and pick the folder. Browsers like Chrome only accept extensions from outside their store this way.',
                        'die Erweiterungsseite und der Erweiterungsordner wurden geöffnet. "Entwicklermodus" einschalten, "Entpackte Erweiterung laden" klicken und den Ordner wählen. Chrome-artige Browser nehmen Erweiterungen von außerhalb ihres Stores nur so an.'),
     'add_browser': ('Add browser…', 'Browser hinzufügen …'),
@@ -914,8 +918,10 @@ class SettingsWindow(QWidget):
         row_nat = QHBoxLayout()
         reg = QPushButton(QIcon.fromTheme('dialog-ok-apply'), t('register'))
         reg.clicked.connect(self.register_native)
+        reg.setToolTip(t('tip_apply'))
         install_btn = QPushButton(QIcon.fromTheme('system-software-install'), t('install_ext'))
         install_btn.clicked.connect(self.install_extension)
+        install_btn.setToolTip(t('tip_install'))
         for b in (reg, install_btn):
             row_nat.addWidget(b)
         row_nat.addStretch(1)
@@ -975,8 +981,9 @@ class SettingsWindow(QWidget):
                     QProcess.startDetached(binary, [xpi])
                     notes.append(entry['name'] + ': ' + t('xpi_opened'))
                 else:
+                    folder = tb.build_firefox_folder()
                     QProcess.startDetached(binary, ['about:debugging#/runtime/this-firefox'])
-                    notes.append(entry['name'] + ': ' + t('no_xpi'))
+                    notes.append(entry['name'] + ': ' + t('no_xpi', d=folder))
             else:
                 scheme = 'vivaldi' if 'vivaldi' in binary else 'edge' if 'edge' in binary else 'opera' if binary == 'opera' else 'chrome'
                 QProcess.startDetached(binary, [scheme + '://extensions'])

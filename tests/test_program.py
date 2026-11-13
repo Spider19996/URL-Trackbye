@@ -19,6 +19,15 @@ class ProgramParts(unittest.TestCase):
         for name in set(re.findall(r'\btb\.([A-Za-z_]\w*)', source)):
             self.assertTrue(hasattr(trackbye, name), 'trackbye has no ' + name)
 
+    def test_firefox_id_matches_the_packager(self):
+        sys.path.insert(0, os.path.join(ROOT, 'tools'))
+        import package_extension
+        self.assertEqual(trackbye.FIREFOX_ID, package_extension.GECKO_ID)
+        self.assertEqual(package_extension.manifests()['firefox']['browser_specific_settings']['gecko']['id'], trackbye.FIREFOX_ID)
+        chrome = package_extension.manifests()['chrome']
+        self.assertNotIn('browser_specific_settings', chrome)
+        self.assertNotIn('scripts', chrome['background'])
+
     def test_browser_is_recognised_from_its_process(self):
         cases = {'/opt/vivaldi/vivaldi-bin --type=zygote': 'vivaldi', '/usr/lib/firefox/firefox -contentproc': 'firefox',
                  '/usr/lib/chromium/chromium': 'chromium', '/opt/google/chrome/chrome': 'google-chrome',

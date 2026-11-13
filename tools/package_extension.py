@@ -18,18 +18,49 @@ DIST = os.path.join(ROOT, 'dist')
 SKIP = {'manifest.json', 'released.json', 'package.json'}
 
 
+GECKO_ID = 'url-trackbye@spider19996'  # the add-on id; the program's FIREFOX_ID must be the same (a test checks it)
+
+
 def manifests():
+    """extension/manifest.json is the Chrome-like one. Firefox gets its own: other background key and gecko settings,
+    so neither browser sees keys it does not understand."""
     base = json.load(open(os.path.join(EXT, 'manifest.json'), encoding='utf-8'))
     firefox = json.loads(json.dumps(base))
     firefox.pop('key', None)
     firefox.pop('minimum_chrome_version', None)
     firefox['background'] = {'scripts': ['background.js'], 'type': 'module'}
-    firefox['browser_specific_settings']['gecko']['data_collection_permissions'] = {'required': ['none']}
-    firefox['browser_specific_settings']['gecko_android'] = {'strict_min_version': '142.0'}
-    chrome = json.loads(json.dumps(base))
-    chrome.pop('browser_specific_settings', None)
-    chrome['background'] = {'service_worker': 'background.js', 'type': 'module'}
-    return {'firefox': firefox, 'chrome': chrome}
+    firefox['browser_specific_settings'] = {
+        'gecko': {'id': GECKO_ID, 'strict_min_version': '140.0', 'data_collection_permissions': {'required': ['none']}},
+        'gecko_android': {'strict_min_version': '142.0'},
+    }
+    return {'firefox': firefox, 'chrome': base}
+
+
+def copy_files(write):
+    for folder, _, files in os.walk(EXT):
+        for name in sorted(files):
+            full = os.path.join(folder, name)
+            rel = os.path.relpath(full, EXT)
+            if name in SKIP and rel == name:
+                continue
+            write(full, rel)
+
+
+def build_firefox_folder():
+    """dist/firefox-unpacked: the Firefox build as a folder, for "Load Temporary Add-on" in about:debugging."""
+    import shutil
+    target = os.path.join(DIST, 'firefox-unpacked')
+    shutil.rmtree(target, ignore_errors=True)
+
+    def write(full, rel):
+        os.makedirs(os.path.dirname(os.path.join(target, rel)), exist_ok=True)
+        shutil.copyfile(full, os.path.join(target, rel))
+    os.makedirs(target, exist_ok=True)
+    copy_files(write)
+    with open(os.path.join(target, 'manifest.json'), 'w', encoding='utf-8') as f:
+        json.dump(manifests()['firefox'], f, indent=2)
+        f.write('\n')
+    return target
 
 
 def main():
@@ -38,14 +69,9 @@ def main():
         path = os.path.join(DIST, 'url-trackbye-%s-%s.zip' % (target, manifest['version']))
         with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
             z.writestr('manifest.json', json.dumps(manifest, indent=2) + '\n')
-            for folder, _, files in os.walk(EXT):
-                for name in sorted(files):
-                    full = os.path.join(folder, name)
-                    rel = os.path.relpath(full, EXT)
-                    if name in SKIP and rel == name:
-                        continue
-                    z.write(full, rel)
+            copy_files(lambda full, rel: z.write(full, rel))
         print('Wrote ' + os.path.relpath(path, ROOT))
+    print('Wrote ' + os.path.relpath(build_firefox_folder(), ROOT))
     return 0
 
 

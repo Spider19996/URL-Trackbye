@@ -425,6 +425,13 @@ def browser_binary(entry):
     return next((b for b in entry.get('bins', []) if shutil.which(b)), None)
 
 
+def build_firefox_folder():
+    """The Firefox build as an unpacked folder (dist/firefox-unpacked) for temporary loading in about:debugging."""
+    sys.path.insert(0, os.path.join(HERE, 'tools'))
+    import package_extension
+    return package_extension.build_firefox_folder()
+
+
 def latest_xpi():
     """The newest signed Firefox package in dist/ (made by tools/sign_firefox.py), or None."""
     import glob
@@ -608,9 +615,10 @@ def send_message(obj):
 def cmd_native():
     """Native messaging host. One-shot calls get one answer per message. An extension that opens a long-lived port
     starts with {"type": "hello"}; then this process also pushes {"type": "reload"} when the extension files on disk
-    have a different version than the running extension, or when `trackbye reload-extension` was run."""
+    have a different version than the running extension, or when `trackbye reload-extension` was run (development
+    installs only: the hello says "dev")."""
     lock = threading.Lock()
-    state = {'ext': None, 'watching': False}
+    state = {'ext': None, 'dev': False, 'watching': False}
 
     def send(obj):
         with lock:
@@ -630,9 +638,10 @@ def cmd_native():
             disk = extension_version()
             if mtime() != seen_trigger:
                 seen_trigger = mtime()
-                diag('info', 'Asking the browser extension to reload (requested)')
-                send({'type': 'reload', 'reason': 'requested'})
-            elif state['ext'] and disk and disk != state['ext'] and asked_for != disk:
+                if state['dev']:
+                    diag('info', 'Asking the browser extension to reload (requested)')
+                    send({'type': 'reload', 'reason': 'requested'})
+            elif state['dev'] and state['ext'] and disk and disk != state['ext'] and asked_for != disk:
                 asked_for = disk
                 diag('info', 'Asking the browser extension to reload (%s -> %s)' % (state['ext'], disk))
                 send({'type': 'reload', 'reason': 'version'})
@@ -645,6 +654,9 @@ def cmd_native():
         note_extension(msg)
         if kind == 'hello':
             state['ext'] = msg.get('ext')
+            # Only an unpacked/temporary (development) install picks up new files on reload. An installed, signed or
+            # store version would just reload the same code, over and over, so it is never asked to.
+            state['dev'] = bool(msg.get('dev'))
             diag('info', 'Browser extension %s connected' % (msg.get('ext') or '(old version)'))
             if not state['watching']:
                 state['watching'] = True
