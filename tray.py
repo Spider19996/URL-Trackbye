@@ -72,7 +72,8 @@ TEXT = {
     'col_browser': ('Browser', 'Browser'),
     'col_found': ('Found', 'Gefunden'),
     'col_reg': ('Registered', 'Eingerichtet'),
-    'register': ('Register', 'Einrichten'),
+    'register': ('Apply', 'Übernehmen'),
+    'native_hint': ('Tick the browsers whose extension should get the rules from this program. Unticking removes the link again.', 'Hake die Browser an, deren Erweiterung die Regeln von diesem Programm bekommen soll. Entfernst du den Haken, wird die Verbindung wieder gelöscht.'),
     'yes': ('yes', 'ja'),
     'no': ('no', 'nein'),
     'opener_head': ('Links from other apps (Discord, mail, …)', 'Links aus anderen Programmen (Discord, Mail, …)'),
@@ -799,24 +800,35 @@ class SettingsWindow(QWidget):
         box.addWidget(g_ext)
 
         g_nat, l_nat = self.group(t('native_head'))
+        nat_hint = QLabel(t('native_hint'))
+        nat_hint.setWordWrap(True)
+        nat_hint.setStyleSheet('color: gray')
+        l_nat.addWidget(nat_hint)
         self.native = QTableWidget(len(tb.NATIVE_BROWSERS), 3)
         self.native.setHorizontalHeaderLabels([t('col_browser'), t('col_found'), t('col_reg')])
-        self.native.horizontalHeader().setStretchLastSection(True)
-        self.native.setFixedHeight(150)
         header = self.native.horizontalHeader()
         header.setStretchLastSection(False)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.native.verticalHeader().setVisible(False)
+        self.native.verticalHeader().setDefaultSectionSize(30)
+        self.native.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.native.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.native.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.native.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.native.verticalHeader().setVisible(False)
+        self.native.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # exactly as high as its rows, so it has no scrollbar of its own
+        self.native.setFixedHeight(header.height() + 30 * len(tb.NATIVE_BROWSERS) + 4)
         for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
-            self.native.setItem(i, 0, QTableWidgetItem(name))
+            item = QTableWidgetItem(name)
+            item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            self.native.setItem(i, 0, item)
             self.native.setItem(i, 1, QTableWidgetItem(''))
             self.native.setItem(i, 2, QTableWidgetItem(''))
         l_nat.addWidget(self.native)
-        reg = QPushButton(QIcon.fromTheme('network-connect'), t('register'))
+        reg = QPushButton(QIcon.fromTheme('dialog-ok-apply'), t('register'))
         reg.clicked.connect(self.register_native)
         l_nat.addWidget(reg, alignment=Qt.AlignmentFlag.AlignLeft)
         box.addWidget(g_nat)
@@ -870,16 +882,30 @@ class SettingsWindow(QWidget):
 
     def refresh_browser_tab(self):
         self.refresh_ext_status()
+        chosen = tb.load_config().get('native_browsers')
         for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
             found = os.path.isdir(os.path.expanduser('~/.config/' + folder))
             registered = os.path.exists(tb.native_manifest_path(folder))
+            first = self.native.item(i, 0)
+            flags = Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled if found else Qt.ItemFlag.NoItemFlags
+            first.setFlags(flags)
+            wanted = found and (registered if chosen is None else folder in chosen)
+            first.setCheckState(Qt.CheckState.Checked if wanted else Qt.CheckState.Unchecked)
             self.native.item(i, 1).setText(t('yes') if found else t('no'))
             self.native.item(i, 2).setText(t('yes') if registered else t('no'))
         self.opener_status.setText(t('opener_status', d=tb.default_browser() or '?'))
 
     def register_native(self):
-        written = tb.install_native()
-        tb.diag('info', 'Registered the browser extension link for: ' + (', '.join(written) or 'no browser found'))
+        """Give the extension its link to the program in the checked browsers, remove it from the unchecked ones."""
+        on, off = [], []
+        for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
+            (on if self.native.item(i, 0).checkState() == Qt.CheckState.Checked else off).append(folder)
+        written = tb.install_native(on)
+        removed = tb.uninstall_native(off)
+        cfg = tb.load_config()
+        cfg['native_browsers'] = on
+        tb.save_config(cfg)
+        tb.diag('info', 'Browser link for the extension: set up %d, removed %d' % (len(written), len(removed)))
         self.refresh_browser_tab()
 
     def install_entry(self):
@@ -947,6 +973,9 @@ class TrayApp:
 
         on = tb.load_config()['clipboard']
         self.apply(on)
+        tb.install_launcher()  # application menu entry "URL Trackbye"
+        if os.path.exists(tb.desktop_file()):
+            tb.install_handler()  # refresh the link opener entry (names), without changing the default browser
         tb.diag('info', 'URL Trackbye %s started' % tb.VERSION)
         self.seen = max([e.get('t', 0) for e in tb.read_events()] or [0])
         self.notice_timer = QTimer()

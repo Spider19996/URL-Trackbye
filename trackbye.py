@@ -45,7 +45,7 @@ EVENTS_MAX = 300
 EXTENSION_STATE = os.path.join(STATE_DIR, 'extension.json')
 RELOAD_TRIGGER = os.path.join(STATE_DIR, 'reload-extension')
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
-                  'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify']}
+                  'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify'], 'native_browsers': None}
 SCRIPT = os.path.realpath(__file__)
 VERSION = '0.6.0'
 
@@ -328,13 +328,16 @@ def desktop_file():
 
 
 def install_handler():
-    """Write the desktop entry that lets trackbye open links (selectable as default browser)."""
+    """Desktop entry of the link opener: shows up as "URL Trackbye Link Opener" when you pick a default browser."""
     path = desktop_file()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
-        f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye (clean links, then open browser)\n'
+        f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye Link Opener\nName[de]=URL Trackbye Link-\u00d6ffner\n'
+                'GenericName=Web Browser\nGenericName[de]=Webbrowser\n'
+                'Comment=Removes tracking from the link, then opens it in your browser\n'
+                'Comment[de]=Entfernt das Tracking aus dem Link und \u00f6ffnet ihn dann in deinem Browser\n'
                 'Exec=' + SCRIPT + ' open %U\nTerminal=false\nIcon=' + os.path.join(HERE, 'assets', 'trackbye.png')
-                + '\nCategories=Network;WebBrowser;\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\n')
+                + '\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\n')
     return path
 
 
@@ -388,6 +391,16 @@ def install_native(folders=None):
     return written
 
 
+def uninstall_native(folders):
+    removed = []
+    for folder in folders:
+        target = native_manifest_path(folder)
+        if os.path.exists(target):
+            os.remove(target)
+            removed.append(target)
+    return removed
+
+
 def cmd_install_native():
     for target in install_native():
         print('Wrote ' + target)
@@ -400,7 +413,7 @@ def set_autostart(on):
     if on:
         os.makedirs(os.path.dirname(AUTOSTART), exist_ok=True)
         with open(AUTOSTART, 'w', encoding='utf-8') as f:
-            f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nExec=' + SCRIPT + '\nTerminal=false\n'
+            f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nComment=Start URL Trackbye with the desktop\nExec=' + SCRIPT + '\nTerminal=false\n'
                     'Icon=' + os.path.join(HERE, 'assets', 'trackbye.png') + '\nX-KDE-autostart-after=panel\n')
     elif os.path.exists(AUTOSTART):
         os.remove(AUTOSTART)
@@ -410,18 +423,22 @@ LAUNCHER = os.path.expanduser('~/.local/share/applications/trackbye-app.desktop'
 
 
 def install_launcher():
-    """Application menu entry, so the settings stay reachable while the tray symbol is hidden."""
+    """Application menu entry "URL Trackbye": starts the app (tray symbol, settings)."""
     os.makedirs(os.path.dirname(LAUNCHER), exist_ok=True)
     with open(LAUNCHER, 'w', encoding='utf-8') as f:
-        f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nComment=Remove tracking from links\n'
+        f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nGenericName=Link cleaner\nGenericName[de]=Link-Reiniger\n'
+                'Comment=Settings and clipboard cleaning for URL Trackbye\n'
+                'Comment[de]=Einstellungen und Zwischenablage-Reinigung von URL Trackbye\n'
                 'Exec=' + SCRIPT + '\nTerminal=false\nIcon=' + os.path.join(HERE, 'assets', 'trackbye.png') +
-                '\nCategories=Network;Utility;\n')
+                '\nCategories=Utility;\n')
 
 
 def note_extension(msg):
     """The extension names its running version in every message; remember it (and when we last heard from it)."""
     state = read_json(EXTENSION_STATE, {})
-    state['version'] = msg.get('ext')  # None: an older extension that does not report it
+    state.setdefault('version', None)  # None: an older extension that does not report its version
+    if msg.get('ext'):
+        state['version'] = msg['ext']
     state['seen'] = time.time()
     write_json(EXTENSION_STATE, state)
 
