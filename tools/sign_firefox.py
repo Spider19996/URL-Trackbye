@@ -13,10 +13,12 @@ Credentials (API key from https://addons.mozilla.org/developers/addon/api/key/) 
     It must only be readable by you (chmod 600); the tool refuses to use it otherwise.
 The secret is only used to sign a short-lived token and is never printed.
 
+  python3 tools/sign_firefox.py --setup       ask for issuer and secret (typed hidden) and store them safely
   python3 tools/sign_firefox.py --dry-run     check credentials and package, send nothing
   python3 tools/sign_firefox.py               upload, wait for the signature, download dist/url-trackbye-<version>.xpi
 """
 import base64
+import getpass
 import hashlib
 import hmac
 import json
@@ -91,7 +93,26 @@ def request(method, url, issuer, secret, body=None, content_type=None):
         return e.code, e.read()
 
 
+def setup():
+    """Ask for the key on the terminal (the secret is not echoed) and store it where only you can read it."""
+    print('Create the key at https://addons.mozilla.org/developers/addon/api/key/ and copy both values.')
+    issuer = input('JWT issuer (looks like user:NNNNN:NN): ').strip()
+    secret = getpass.getpass('JWT secret (hidden): ').strip()
+    if not issuer or not secret:
+        sys.exit('Nothing stored: both values are needed.')
+    os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
+    fd = os.open(CREDENTIALS_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        json.dump({'issuer': issuer, 'secret': secret}, f, indent=2)
+        f.write('\n')
+    os.chmod(CREDENTIALS_FILE, 0o600)
+    print('Stored in %s (only you can read it). Check with: python3 tools/sign_firefox.py --dry-run' % CREDENTIALS_FILE)
+    return 0
+
+
 def main():
+    if '--setup' in sys.argv:
+        return setup()
     dry = '--dry-run' in sys.argv
     manifest = package_extension.manifests()['firefox']
     guid, version = manifest['browser_specific_settings']['gecko']['id'], manifest['version']

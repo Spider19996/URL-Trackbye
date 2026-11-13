@@ -73,6 +73,15 @@ TEXT = {
     'col_found': ('Found', 'Gefunden'),
     'col_reg': ('Registered', 'Eingerichtet'),
     'register': ('Apply', 'Übernehmen'),
+    'install_ext': ('Install in ticked browsers…', 'In angehakten Browsern installieren …'),
+    'tick_first': ('Tick the browsers first.', 'Hake zuerst die Browser an.'),
+    'no_binary': ('the program could not be found.', 'das Programm wurde nicht gefunden.'),
+    'xpi_opened': ('the signed extension was opened; confirm "Add" in the window that appears in Firefox.',
+                   'die signierte Erweiterung wurde geöffnet; bestätige in Firefox im erscheinenden Fenster "Hinzufügen".'),
+    'no_xpi': ('there is no signed package yet (tools/sign_firefox.py creates it). The debugging page was opened instead: "Load Temporary Add-on", then choose manifest.json in the extension folder (it stays until Firefox closes).',
+               'es gibt noch kein signiertes Paket (tools/sign_firefox.py erstellt es). Stattdessen wurde die Debugging-Seite geöffnet: "Temporäres Add-on laden" und die manifest.json im Erweiterungsordner wählen (gilt bis Firefox geschlossen wird).'),
+    'chromium_steps': ('the extensions page and the extension folder were opened. Switch on "Developer mode", click "Load unpacked" and pick the folder. Browsers like Chrome only accept extensions from outside their store this way.',
+                       'die Erweiterungsseite und der Erweiterungsordner wurden geöffnet. "Entwicklermodus" einschalten, "Entpackte Erweiterung laden" klicken und den Ordner wählen. Chrome-artige Browser nehmen Erweiterungen von außerhalb ihres Stores nur so an.'),
     'add_browser': ('Add browser…', 'Browser hinzufügen …'),
     'remove_browser': ('Remove selected', 'Auswahl entfernen'),
     'custom_tag': ('(added)', '(hinzugefügt)'),
@@ -845,6 +854,9 @@ class SettingsWindow(QWidget):
         row_ext.addWidget(open_btn)
         row_ext.addWidget(page_btn)
         row_ext.addStretch(1)
+        install_btn = QPushButton(QIcon.fromTheme('system-software-install'), t('install_ext'))
+        install_btn.clicked.connect(self.install_extension)
+        row_ext.addWidget(install_btn)
         l_ext.addLayout(row_ext)
         grid = QGridLayout()
         grid.setHorizontalSpacing(14)
@@ -926,6 +938,34 @@ class SettingsWindow(QWidget):
     def heading(text):
         label = QLabel('<b>' + text + '</b>')
         return label
+
+    def install_extension(self):
+        """Start the installation of the extension in every ticked browser: Firefox-like browsers open the signed
+        package (one click to confirm), Chrome-like ones open their extensions page (they only accept unpacked ones
+        in developer mode, there is no way around that without the store)."""
+        wanted = [self.native.item(i, 0).data(Qt.ItemDataRole.UserRole) for i in range(self.native.rowCount())
+                  if self.native.item(i, 0).checkState() == Qt.CheckState.Checked]
+        entries = [e for e in tb.browser_entries() if e['id'] in wanted]
+        notes = []
+        for entry in entries:
+            binary = tb.browser_binary(entry)
+            if not binary:
+                notes.append(entry['name'] + ': ' + t('no_binary'))
+            elif entry['kind'] == 'firefox':
+                xpi = tb.latest_xpi()
+                if xpi:
+                    QProcess.startDetached(binary, [xpi])
+                    notes.append(entry['name'] + ': ' + t('xpi_opened'))
+                else:
+                    QProcess.startDetached(binary, ['about:debugging#/runtime/this-firefox'])
+                    notes.append(entry['name'] + ': ' + t('no_xpi'))
+            else:
+                scheme = 'vivaldi' if 'vivaldi' in binary else 'edge' if 'edge' in binary else 'opera' if binary == 'opera' else 'chrome'
+                QProcess.startDetached(binary, [scheme + '://extensions'])
+                notes.append(entry['name'] + ': ' + t('chromium_steps'))
+        if any(e['kind'] == 'chromium' for e in entries):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.join(tb.HERE, 'extension')))
+        QMessageBox.information(self, t('title'), '\n\n'.join(notes) if notes else t('tick_first'))
 
     def open_extensions_page(self):
         browser = tb.load_config()['browser']

@@ -24,6 +24,7 @@ Your own additions go into ~/.config/trackbye/rules.json (same format, merged wi
 """
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -417,6 +418,21 @@ def browser_found(entry):
         return True
     path = os.path.expanduser(entry['detect'])
     return os.path.isdir(path) or bool(entry.get('custom') and os.path.isdir(os.path.dirname(path.rstrip('/'))))
+
+
+def browser_binary(entry):
+    """The command that starts this browser, or None."""
+    return next((b for b in entry.get('bins', []) if shutil.which(b)), None)
+
+
+def latest_xpi():
+    """The newest signed Firefox package in dist/ (made by tools/sign_firefox.py), or None."""
+    import glob
+    files = glob.glob(os.path.join(HERE, 'dist', 'url-trackbye-*.xpi'))
+    def key(path):
+        m = re.search(r'url-trackbye-([\d.]+)\.xpi$', path)
+        return [int(x) for x in m.group(1).split('.')] if m else []
+    return max(files, key=key) if files else None
 
 
 def suggest_native_dir(name, kind):
