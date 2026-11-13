@@ -73,6 +73,8 @@ TEXT = {
     'col_found': ('Found', 'Gefunden'),
     'col_reg': ('Registered', 'Eingerichtet'),
     'register': ('Apply', 'Übernehmen'),
+    'col_ext': ('Extension', 'Erweiterung'),
+    'ext_no_contact': ('No contact yet: the extension is not loaded in this browser, or the link to the program is not set up.', 'Noch kein Kontakt: Die Erweiterung ist in diesem Browser nicht geladen oder die Verbindung zum Programm ist nicht eingerichtet.'),
     'install_ext': ('Install in ticked browsers…', 'In angehakten Browsern installieren …'),
     'tick_first': ('Tick the browsers first.', 'Hake zuerst die Browser an.'),
     'no_binary': ('the program could not be found.', 'das Programm wurde nicht gefunden.'),
@@ -872,23 +874,13 @@ class SettingsWindow(QWidget):
         row_ext.addWidget(open_btn)
         row_ext.addWidget(page_btn)
         row_ext.addStretch(1)
-        install_btn = QPushButton(QIcon.fromTheme('system-software-install'), t('install_ext'))
-        install_btn.clicked.connect(self.install_extension)
-        row_ext.addWidget(install_btn)
         l_ext.addLayout(row_ext)
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(14)
-        grid.setVerticalSpacing(6)
-        self.ext_installed = QLabel('')
+        current_row = QHBoxLayout()
+        current_row.addWidget(QLabel(t('ext_current')))
         self.ext_current = QLabel('')
-        self.ext_state = QLabel('')
-        self.ext_state.setWordWrap(True)
-        for row, (key, value) in enumerate((('ext_installed', self.ext_installed), ('ext_current', self.ext_current),
-                                            ('ext_state', self.ext_state))):
-            grid.addWidget(QLabel(t(key)), row, 0, Qt.AlignmentFlag.AlignTop)
-            grid.addWidget(value, row, 1, Qt.AlignmentFlag.AlignTop)
-        grid.setColumnStretch(1, 1)
-        l_ext.addLayout(grid)
+        current_row.addWidget(self.ext_current)
+        current_row.addStretch(1)
+        l_ext.addLayout(current_row)
         note = QLabel(t('ext_note'))
         note.setWordWrap(True)
         note.setStyleSheet('color: gray')
@@ -900,12 +892,12 @@ class SettingsWindow(QWidget):
         nat_hint.setWordWrap(True)
         nat_hint.setStyleSheet('color: gray')
         l_nat.addWidget(nat_hint)
-        self.native = QTableWidget(0, 3)
-        self.native.setHorizontalHeaderLabels([t('col_browser'), t('col_found'), t('col_reg')])
+        self.native = QTableWidget(0, 4)
+        self.native.setHorizontalHeaderLabels([t('col_browser'), t('col_found'), t('col_reg'), t('col_ext')])
         header = self.native.horizontalHeader()
         header.setStretchLastSection(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.native_widths = (240, 100, 120)  # fixed width: the table does not stretch over the whole page
+        self.native_widths = (220, 90, 110, 170)  # fixed width: the table does not stretch over the whole page
         for column, width in enumerate(self.native_widths):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
             self.native.setColumnWidth(column, width)
@@ -922,14 +914,21 @@ class SettingsWindow(QWidget):
         row_nat = QHBoxLayout()
         reg = QPushButton(QIcon.fromTheme('dialog-ok-apply'), t('register'))
         reg.clicked.connect(self.register_native)
+        install_btn = QPushButton(QIcon.fromTheme('system-software-install'), t('install_ext'))
+        install_btn.clicked.connect(self.install_extension)
+        for b in (reg, install_btn):
+            row_nat.addWidget(b)
+        row_nat.addStretch(1)
+        l_nat.addLayout(row_nat)
+        row_more = QHBoxLayout()
         add_browser = QPushButton(QIcon.fromTheme('list-add'), t('add_browser'))
         add_browser.clicked.connect(self.add_browser)
         self.remove_browser_btn = QPushButton(QIcon.fromTheme('list-remove'), t('remove_browser'))
         self.remove_browser_btn.clicked.connect(self.remove_browser)
-        for b in (reg, add_browser, self.remove_browser_btn):
-            row_nat.addWidget(b)
-        row_nat.addStretch(1)
-        l_nat.addLayout(row_nat)
+        for b in (add_browser, self.remove_browser_btn):
+            row_more.addWidget(b)
+        row_more.addStretch(1)
+        l_nat.addLayout(row_more)
         box.addWidget(g_nat)
 
         g_open, l_open = self.group(t('opener_head'))
@@ -997,26 +996,14 @@ class SettingsWindow(QWidget):
         QProcess.startDetached(browser, [scheme + '://extensions'])
 
     def refresh_ext_status(self):
-        state = tb.read_json(tb.EXTENSION_STATE, {})
-        current = tb.extension_version() or t('ext_none')
-        outdated = tb.extension_outdated()
-        self.ext_current.setText(current)
-        self.ext_state.setStyleSheet('')
-        if not state:
-            self.ext_installed.setText(t('ext_none'))
-            self.ext_state.setText(t('ext_unknown'))
-        elif outdated:
-            self.ext_installed.setText(outdated[0] or t('ext_older'))
-            self.ext_state.setText(t('ext_old_short'))
-            self.ext_state.setStyleSheet('color: #c0392b')
-        else:
-            self.ext_installed.setText(state.get('version') or t('ext_none'))
-            self.ext_state.setText(t('ext_ok'))
+        self.ext_current.setText(tb.extension_version() or t('ext_none'))
 
     def fill_native_table(self):
         """One row per known browser (built-in and added ones) with a checkbox, found? and set up?"""
         entries = tb.browser_entries()
         chosen = tb.load_config().get('native_browsers')
+        versions = tb.extension_versions()
+        current = tb.extension_version()
         self.native.setRowCount(len(entries))
         self.native.setFixedHeight(self.native.horizontalHeader().height() + 30 * len(entries) + 4)
         for i, entry in enumerate(entries):
@@ -1034,6 +1021,20 @@ class SettingsWindow(QWidget):
                 item = QTableWidgetItem(t('yes') if flag else t('no'))
                 item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 self.native.setItem(i, column, item)
+            version_item = QTableWidgetItem()
+            version_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            running = versions.get(entry['id'])
+            if running is None:
+                version_item.setText('–')
+                version_item.setToolTip(t('ext_no_contact'))
+            elif running == current:
+                version_item.setText(running + ' ✓')
+                version_item.setForeground(QColor('#1e8449'))
+            else:
+                version_item.setText((running or t('ext_older')) + ' → ' + current)
+                version_item.setForeground(QColor('#c0392b'))
+                version_item.setToolTip(t('ext_old_short'))
+            self.native.setItem(i, 3, version_item)
 
     def refresh_browser_tab(self):
         self.refresh_ext_status()

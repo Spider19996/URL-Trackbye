@@ -19,6 +19,13 @@ class ProgramParts(unittest.TestCase):
         for name in set(re.findall(r'\btb\.([A-Za-z_]\w*)', source)):
             self.assertTrue(hasattr(trackbye, name), 'trackbye has no ' + name)
 
+    def test_browser_is_recognised_from_its_process(self):
+        cases = {'/opt/vivaldi/vivaldi-bin --type=zygote': 'vivaldi', '/usr/lib/firefox/firefox -contentproc': 'firefox',
+                 '/usr/lib/chromium/chromium': 'chromium', '/opt/google/chrome/chrome': 'google-chrome',
+                 '/usr/bin/floorp': 'floorp', '/usr/bin/python3': None}
+        for text, expected in cases.items():
+            self.assertEqual(trackbye.browser_id_from_process(text), expected, text)
+
     def test_native_host_answers_and_remembers_the_extension_version(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = dict(os.environ, XDG_STATE_HOME=tmp, XDG_CONFIG_HOME=tmp)

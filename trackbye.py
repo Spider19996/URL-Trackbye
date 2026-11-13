@@ -516,25 +516,66 @@ def install_launcher():
                 '\nCategories=Utility;\n')
 
 
+# What to look for in the path of a browser process to tell which browser it is (most specific first).
+PROCESS_HINTS = [('vivaldi', 'vivaldi'), ('brave', 'BraveSoftware/Brave-Browser'), ('microsoft-edge', 'microsoft-edge'),
+                 ('msedge', 'microsoft-edge'), ('opera', 'opera'), ('floorp', 'floorp'), ('librewolf', 'librewolf'),
+                 ('zen', 'zen'), ('waterfox', 'waterfox'), ('firefox', 'firefox'), ('chromium', 'chromium'),
+                 ('google-chrome', 'google-chrome'), ('/chrome/chrome', 'google-chrome')]
+
+
+def browser_id_from_process(text):
+    """Browser id (as in browser_entries) for the path/command line of a browser process, or None."""
+    low = text.lower()
+    return next((browser_id for hint, browser_id in PROCESS_HINTS if hint in low), None)
+
+
+def parent_browser():
+    """The native host is started by the browser: look at the parent process to see which one it is."""
+    try:
+        ppid = os.getppid()
+        text = os.path.realpath('/proc/%d/exe' % ppid) + ' ' + open('/proc/%d/cmdline' % ppid, 'rb').read().replace(b'\0', b' ').decode('utf-8', 'replace')[:300]
+    except OSError:
+        return None
+    return browser_id_from_process(text)
+
+
 def note_extension(msg):
-    """The extension names its running version in every message; remember it (and when we last heard from it)."""
+    """The extension names its running version in every message; remember it, per browser (and when we last heard)."""
     state = read_json(EXTENSION_STATE, {})
     state.setdefault('version', None)  # None: an older extension that does not report its version
+    state['seen'] = time.time()
     if msg.get('ext'):
         state['version'] = msg['ext']
-    state['seen'] = time.time()
+    browser = parent_browser()
+    if browser:
+        entry = state.setdefault('browsers', {}).setdefault(browser, {})
+        entry['seen'] = state['seen']
+        if msg.get('ext'):
+            entry['version'] = msg['ext']
     write_json(EXTENSION_STATE, state)
 
 
-def extension_outdated(max_age=3 * 86400):
-    """(running, available) if the browser runs an older extension than the files on disk, else None.
-    Only counts if the extension was heard from recently (otherwise it is probably not installed any more)."""
+def extension_versions(max_age=3 * 86400):
+    """{browser id: running extension version} for browsers heard from recently ('' = reports no version)."""
     state = read_json(EXTENSION_STATE, {})
+    now = time.time()
+    return {b: v.get('version') or '' for b, v in (state.get('browsers') or {}).items() if now - v.get('seen', 0) <= max_age}
+
+
+def extension_outdated(max_age=3 * 86400):
+    """(running, available) if a browser runs an older extension than the files on disk, else None.
+    Only counts if the extension was heard from recently (otherwise it is probably not installed any more)."""
     available = extension_version()
-    if not state or not available or time.time() - state.get('seen', 0) > max_age:
+    if not available:
         return None
-    running = state.get('version')
-    return None if running == available else (running or '', available)
+    versions = extension_versions(max_age)
+    if not versions:  # browsers not recognised: fall back to the overall version
+        state = read_json(EXTENSION_STATE, {})
+        if not state or time.time() - state.get('seen', 0) > max_age:
+            return None
+        versions = {'': state.get('version') or ''}
+    old = [v for v in versions.values() if v != available]
+    return (old[0], available) if old else None
 
 
 def extension_version():
