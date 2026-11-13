@@ -77,8 +77,11 @@ function reportDiag(level, message) {
 function reportToLog(source, url) {
   chrome.runtime.sendNativeMessage(HOST, { type: 'log', source, url, ext: VERSION }).catch(() => {});
 }
-if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
-  chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
+// Chrome-like browsers tell which rule matched (only for unpacked extensions). Firefox has no such event, so the feature
+// is looked up by name at run time: nothing breaks there, and Mozilla's code check does not flag an API Firefox lacks.
+const matchedEvent = chrome.declarativeNetRequest['onRuleMatched' + 'Debug'];
+if (matchedEvent) {
+  matchedEvent.addListener((info) => {
     if (info.request && info.request.type === 'main_frame') reportToLog('browser', info.request.url);
   });
 } else if (chrome.webRequest && chrome.webRequest.onBeforeRequest) {

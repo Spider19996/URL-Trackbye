@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "URL Trackbye",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Removes tracking parameters from links before the page loads. Shares its rules with the trackbye program when installed.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArLVk7TkaOaRM1Irs/Cn0vwoRMObzIYyrfXiI5TSQm+2E4ZwTwksOdexmmzmkd5objaA4ocrEYRxPC0g5lZolAiXVa89RVx9/wi7fZDRczImG+kh+tDx5BOC4Znyy9xcl2qE1/FczIv0HQIwGZ8D9im3/HcXBb2H/1tNpGWFskl8a/mxcl9jEJ9v08hqHSSOjnecpeDv6TbZnDnmSeMdByT0L5JTrnpTA5RyjzEWH/4N3oweUjQnfDE6v1WydQnfj5uD9cpcv0L7fOOIlnnhmCA6xRw/WQPwZguSiXf0GKSDdOWkd5uVvY2ZSNeByhLB2WNWcBkkq3poI6YsDiR5OIwIDAQAB",
   "minimum_chrome_version": "110",
