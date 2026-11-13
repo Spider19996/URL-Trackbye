@@ -48,13 +48,22 @@ async function applyRules() {
 // Long-lived connection to the program: it can tell this extension to reload itself right away (new version on disk,
 // or `trackbye reload-extension`). The open port also keeps this service worker alive.
 let port = null;
-function connectHost() {
+
+// Only an unpacked / temporary install ("development") picks up new files when it reloads. An installed, signed or
+// store version would just load the same code again and again, so it never reloads itself on request.
+async function isDevInstall() {
+  try { return (await chrome.management.getSelf()).installType === 'development'; } catch (e) { return false; }
+}
+
+async function connectHost() {
   if (port) return;
   try {
-    port = chrome.runtime.connectNative(HOST);
-    port.onMessage.addListener((msg) => { if (msg && msg.type === 'reload') chrome.runtime.reload(); });
-    port.onDisconnect.addListener(() => { port = null; void chrome.runtime.lastError; });
-    port.postMessage({ type: 'hello', ext: VERSION });
+    const connection = chrome.runtime.connectNative(HOST);
+    port = connection;
+    const dev = await isDevInstall();
+    connection.onMessage.addListener((msg) => { if (dev && msg && msg.type === 'reload') chrome.runtime.reload(); });
+    connection.onDisconnect.addListener(() => { port = null; void chrome.runtime.lastError; });
+    connection.postMessage({ type: 'hello', ext: VERSION, dev });
   } catch (e) { port = null; }
 }
 connectHost();
@@ -119,7 +128,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 async function checkForUpdate() {
   try {
     const reply = await chrome.runtime.sendNativeMessage(HOST, { type: 'version', ext: VERSION });
-    if (reply && reply.ok && reply.version && reply.version !== chrome.runtime.getManifest().version) {
+    if (reply && reply.ok && reply.version && reply.version !== chrome.runtime.getManifest().version && await isDevInstall()) {
       chrome.runtime.reload();
     }
   } catch (e) { /* program not installed */ }

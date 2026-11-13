@@ -657,6 +657,9 @@ def cmd_native():
             # Only an unpacked/temporary (development) install picks up new files on reload. An installed, signed or
             # store version would just reload the same code, over and over, so it is never asked to.
             state['dev'] = bool(msg.get('dev'))
+            note = read_json(EXTENSION_STATE, {})
+            note['dev'] = state['dev']
+            write_json(EXTENSION_STATE, note)
             diag('info', 'Browser extension %s connected' % (msg.get('ext') or '(old version)'))
             if not state['watching']:
                 state['watching'] = True
