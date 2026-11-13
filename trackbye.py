@@ -16,6 +16,8 @@ One small program with several jobs that all use the same rules (rules.json):
   trackbye open [URL...]     clean the URLs and open them in the real browser (use as default browser)
   trackbye install-handler   write the desktop entry that makes `open` selectable as default browser
   trackbye install-native    register the native messaging host for the browser extension
+  trackbye rules-update [--force]   download the published rule list now (the app does it daily when switched on)
+  trackbye rules-reset       forget the downloaded list and use the rules that ship with the program
   trackbye install [--autostart] [--native] [--link]   set up for this user (menu entry, optional autostart, browser link, command)
   trackbye uninstall [--purge]   remove what install created (--purge: also settings and log)
   trackbye reload-extension  ask the browser extension to reload itself (after changing its files)
@@ -35,6 +37,8 @@ import tempfile
 import threading
 import time
 import traceback
+import urllib.error
+import urllib.request
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 CONFIG_DIR = os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'trackbye')
@@ -49,9 +53,9 @@ EVENTS_MAX = 300
 EXTENSION_STATE = os.path.join(STATE_DIR, 'extension.json')
 RELOAD_TRIGGER = os.path.join(STATE_DIR, 'reload-extension')
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
-                  'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify'], 'native_browsers': None, 'custom_browsers': []}
+                  'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify'], 'native_browsers': None, 'custom_browsers': [], 'rules_auto': True, 'rules_url': ''}
 SCRIPT = os.path.realpath(__file__)
-VERSION = '0.6.0'
+VERSION = '0.7.0'
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -70,17 +74,131 @@ def read_json(path, fallback, report=False):
         return fallback
 
 
-def builtin_rules():
-    """The rules that ship with the program: our own rules.json plus the converted ClearURLs names (rules.clearurls.json,
-    LGPL-3.0, see NOTICE.md). Lists are united without duplicates; our own entries come first."""
-    own = read_json(os.path.join(HERE, 'rules.json'), {}, True)
-    community = read_json(os.path.join(HERE, 'rules.clearurls.json'), {}, True)
+# --------------------------------------------------------------------------------------------------------------
+# The rule list: a small list ships with the program (offline fallback); a larger one is built outside of it
+# (hand-written rules + ClearURLs names, see tools/build_rules.py), published, and downloaded by the program.
+# --------------------------------------------------------------------------------------------------------------
+DEFAULT_RULES_URL = 'https://raw.githubusercontent.com/Spider19996/URL-Trackbye/rules/rules.json'
+RULES_DOWNLOADED = os.path.join(CONFIG_DIR, 'rules.downloaded.json')
+RULES_META = os.path.join(CONFIG_DIR, 'rules.meta.json')
+RULES_MAX_BYTES = 1_500_000
+RULES_CHECK_EVERY = 24 * 3600
+_NAME = re.compile(r'^[A-Za-z0-9_.\-]{1,64}$')
+_HOST = re.compile(r'^[a-z0-9][a-z0-9.\-]{0,252}$')
+
+
+def validate_rules(doc):
+    """Check a downloaded rule list strictly and return it cleaned; raise ValueError if anything is off.
+    Only plain parameter names and host names are allowed, so even a manipulated list can do nothing but remove
+    parameters from links."""
+    if not isinstance(doc, dict):
+        raise ValueError('not an object')
+
+    def names(value, what, limit, pattern):
+        if not isinstance(value, list) or len(value) > limit:
+            raise ValueError(what + ': not a list or too long')
+        out = []
+        for item in value:
+            if not isinstance(item, str) or not pattern.match(item):
+                raise ValueError(what + ': bad entry')
+            out.append(item)
+        return list(dict.fromkeys(out))
+
+    sites = []
+    if not isinstance(doc.get('sites', []), list) or len(doc.get('sites', [])) > 1500:
+        raise ValueError('sites: not a list or too long')
+    for site in doc.get('sites', []):
+        if not isinstance(site, dict):
+            raise ValueError('sites: bad entry')
+        sites.append({'name': str(site.get('name', ''))[:80], 'hosts': names(site.get('hosts', []), 'hosts', 100, _HOST),
+                      'remove': names(site.get('remove', []), 'remove', 500, _NAME),
+                      'source': str(site.get('source', ''))[:40]})
     return {
-        'version': own.get('version', 1),
-        'exclude_hosts': list(own.get('exclude_hosts', [])),
-        'global_remove': list(dict.fromkeys(list(own.get('global_remove', [])) + list(community.get('global_remove', [])))),
-        'sites': list(own.get('sites', [])) + list(community.get('sites', [])),
+        'version': int(doc.get('version', 0)),
+        'built': str(doc.get('built', ''))[:40],
+        'sources': [{k: str(v)[:200] for k, v in src.items()} for src in doc.get('sources', []) if isinstance(src, dict)][:10],
+        'exclude_hosts': names(doc.get('exclude_hosts', []), 'exclude_hosts', 500, _HOST),
+        'global_remove': names(doc.get('global_remove', []), 'global_remove', 2000, _NAME),
+        'sites': sites,
     }
+
+
+def shipped_rules():
+    own = read_json(os.path.join(HERE, 'rules.json'), {}, True)
+    return {'version': own.get('version', 1), 'exclude_hosts': list(own.get('exclude_hosts', [])),
+            'global_remove': list(own.get('global_remove', [])), 'sites': list(own.get('sites', []))}
+
+
+def builtin_rules():
+    """The downloaded list if there is a valid one, else the small shipped list."""
+    downloaded = read_json(RULES_DOWNLOADED, None)
+    if isinstance(downloaded, dict) and downloaded.get('sites') is not None:
+        return {'version': downloaded.get('version', 1), 'exclude_hosts': list(downloaded.get('exclude_hosts', [])),
+                'global_remove': list(downloaded.get('global_remove', [])), 'sites': list(downloaded.get('sites', []))}
+    return shipped_rules()
+
+
+def rules_info():
+    """What the settings window shows: where the rules come from, how many there are, when they were checked."""
+    meta = read_json(RULES_META, {})
+    downloaded = read_json(RULES_DOWNLOADED, None)
+    current = builtin_rules()
+    return {'source': 'downloaded' if isinstance(downloaded, dict) else 'shipped', 'version': current.get('version'),
+            'built': (downloaded or {}).get('built', ''), 'sources': (downloaded or {}).get('sources', []),
+            'global': len(current['global_remove']), 'sites': len(current['sites']),
+            'checked': meta.get('checked', 0), 'url': meta.get('url', ''), 'error': meta.get('error', '')}
+
+
+def rules_due():
+    cfg = load_config()
+    return bool(cfg.get('rules_auto')) and time.time() - read_json(RULES_META, {}).get('checked', 0) > RULES_CHECK_EVERY
+
+
+def rules_update(force=False):
+    """Download the rule list, validate it and store it. Returns (status, message): updated / unchanged / error.
+    Only this call talks to the network; it sends no personal data (a plain GET with a generic user agent)."""
+    cfg = load_config()
+    url = cfg.get('rules_url') or DEFAULT_RULES_URL
+    meta = read_json(RULES_META, {})
+    meta['url'] = url
+    if not (url.startswith('https://') or url.startswith('http://127.0.0.1')):
+        meta['error'] = 'The rules address must start with https://'
+        write_json(RULES_META, meta)
+        return 'error', meta['error']
+    request = urllib.request.Request(url, headers={'User-Agent': 'url-trackbye/' + VERSION})
+    if meta.get('etag') and not force and os.path.exists(RULES_DOWNLOADED):
+        request.add_header('If-None-Match', meta['etag'])
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            raw = response.read(RULES_MAX_BYTES + 1)
+            etag = response.headers.get('ETag', '')
+        if len(raw) > RULES_MAX_BYTES:
+            raise ValueError('the list is too large')
+        doc = validate_rules(json.loads(raw.decode('utf-8')))
+        write_json(RULES_DOWNLOADED, doc)
+        meta.update(etag=etag, checked=time.time(), error='')
+        write_json(RULES_META, meta)
+        message = 'Rules updated: version %s, %d global names, %d sites' % (doc['version'], len(doc['global_remove']), len(doc['sites']))
+        diag('info', message)
+        return 'updated', message
+    except urllib.error.HTTPError as e:
+        if e.code == 304:
+            meta.update(checked=time.time(), error='')
+            write_json(RULES_META, meta)
+            return 'unchanged', 'The rules are up to date.'
+        message = 'Could not download the rules (HTTP %d)%s' % (e.code, ': no list has been published yet' if e.code == 404 else '')
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        message = 'Could not use the downloaded rules: %s' % e
+    meta.update(checked=time.time(), error=message)
+    write_json(RULES_META, meta)
+    diag('warning', message)
+    return 'error', message
+
+
+def rules_reset():
+    for path in (RULES_DOWNLOADED, RULES_META):
+        if os.path.exists(path):
+            os.remove(path)
 
 
 def load_rules():
@@ -817,6 +935,13 @@ def run(argv):
         cmd_install_native()
     elif cmd == 'native':
         cmd_native()
+    elif cmd == 'rules-update':
+        status, message = rules_update('--force' in rest)
+        print(json.dumps({'status': status, 'message': message}))
+        return 0 if status != 'error' else 1
+    elif cmd == 'rules-reset':
+        rules_reset()
+        print('Back to the rules that ship with the program.')
     elif cmd == 'install':
         cmd_install(rest)
     elif cmd == 'uninstall':

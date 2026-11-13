@@ -1,0 +1,36 @@
+# Builds the rule list that URL Trackbye downloads and publishes it on the branch "rules".
+# The program fetches https://raw.githubusercontent.com/Spider19996/URL-Trackbye/rules/rules.json
+name: Build rules
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'      # every Monday
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['rules.json', 'tools/build_rules.py', 'tools/import_clearurls.py', 'trackbye.py']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run the tests
+        run: python3 -m unittest discover -s tests
+      - name: Build the list (downloads ClearURLs and checks its published hash)
+        run: python3 tools/build_rules.py --out build
+      - name: Publish on the rules branch
+        run: |
+          cd build
+          git init -q -b rules
+          git config user.name "url-trackbye rules build"
+          git config user.email "actions@users.noreply.github.com"
+          git add rules.json NOTICE.md COPYING.LESSER
+          git commit -q -m "Rules $(date -u +%Y-%m-%d)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" rules

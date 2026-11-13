@@ -38,22 +38,30 @@ class Importer(unittest.TestCase):
 
 
 class ShippedRules(unittest.TestCase):
+    def built(self):
+        import build_rules
+        doc, _ = build_rules.build(trackbye.shipped_rules(), SAMPLE, 'abc', today='2026-11-13')
+        return doc
+
     def test_things_a_page_needs_survive(self):
-        rules = trackbye.builtin_rules()
+        rules = self.built()
         keep = ['https://www.amazon.de/dp/B0?th=1&psc=1', 'https://www.youtube.com/watch?v=a&t=5&list=PL1',
                 'https://www.google.com/search?q=hallo', 'https://github.com/o/r/tree/main?ref=dev', 'https://example.com/a?page=2&sort=asc']
         for url in keep:
             self.assertEqual(trackbye.clean_url(url, rules), url, url)
 
-    def test_the_imported_names_clean(self):
-        rules = trackbye.builtin_rules()
-        self.assertEqual(trackbye.clean_url('https://example.com/a?id=1&_hsenc=x&mc_eid=y&srsltid=z', rules), 'https://example.com/a?id=1')
+    def test_the_converted_names_clean(self):
+        self.assertEqual(trackbye.clean_url('https://example.com/a?id=1&mc_tc=y&fbclid=z', self.built()), 'https://example.com/a?id=1')
 
-    def test_attribution_is_shipped(self):
-        for name in ('NOTICE.md', 'COPYING.LESSER'):
+    def test_the_built_list_is_valid_and_carries_its_sources(self):
+        doc = self.built()
+        self.assertEqual(trackbye.validate_rules(doc)['version'], 20261113)
+        self.assertEqual([s['license'] for s in doc['sources']], ['GPL-3.0-or-later', 'LGPL-3.0'])
+
+    def test_attribution_and_workflow_are_in_the_repository(self):
+        for name in ('NOTICE.md', 'COPYING.LESSER', '.github/workflows/rules.yml'):
             self.assertTrue(os.path.exists(os.path.join(ROOT, name)), name)
-        data = trackbye.read_json(os.path.join(ROOT, 'rules.clearurls.json'), {})
-        self.assertEqual(data['source']['license'], 'LGPL-3.0')
+        self.assertFalse(os.path.exists(os.path.join(ROOT, 'rules.clearurls.json')), 'the converted list is built outside the program')
 
 
 if __name__ == '__main__':

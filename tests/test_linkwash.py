@@ -5,7 +5,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import trackbye  # noqa: E402
 
-RULES = trackbye.builtin_rules()
+RULES = trackbye.shipped_rules()
 
 
 def clean(url):

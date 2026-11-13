@@ -158,11 +158,19 @@ Set `"browser"` in `~/.config/trackbye/config.json` if your browser is not `viva
 
 ## Rules and where they come from
 
-The built-in rules are `rules.json` (hand-written: Google, YouTube, Amazon, ...) plus `rules.clearurls.json`: tracking
+Only a small list ships with the program (`rules.json`: Google, YouTube, Amazon, Steam, ... about 4 KB, the offline
+fallback). The big list is **built outside of the program**: `tools/build_rules.py` merges our rules with tracking
 parameter names converted from the [ClearURLs](https://github.com/ClearURLs/Rules) rules database (LGPL-3.0, see
-[NOTICE.md](NOTICE.md)). The importer `tools/import_clearurls.py` only takes what is safe as an exact name
-(no regular expressions, no providers with exceptions, not names pages often need such as `ref` or `source`) and checks the
-published hash before using the download. `extension/rules.json` is the combined copy the extension carries.
+[NOTICE.md](NOTICE.md); only exact names, no providers with exceptions, not names pages often need such as `ref` or
+`source`; the published hash is checked). The GitHub workflow `.github/workflows/rules.yml` does that every week and
+publishes the result on the branch `rules`.
+
+The program downloads that list: once a day by itself (switch off on the Rules page), or with **Update now**
+(`trackbye rules-update` on the command line). The download is validated strictly (only plain parameter and host names,
+size limits) before it replaces the shipped list; if anything is wrong, the old list stays. The Rules page shows which list is
+in use and when it was checked, and **Use the rules that ship with the program** goes back to the small one
+(`trackbye rules-reset`). The browser extension gets the same list through the program; without it, it uses its own small copy.
+Your own additions (below) are added on top. The address can be changed with `rules_url` in `~/.config/trackbye/config.json`.
 
 ## Your own rules
 

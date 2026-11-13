@@ -68,7 +68,7 @@ TEXT = {
     'del_row': ('Remove selected', 'Auswahl entfernen'),
     'save': ('Save', 'Speichern'),
     'saved': ('Saved.', 'Gespeichert.'),
-    'builtin': ('Built-in rules: {p} parameters and {s} sites', 'Eingebaute Regeln: {p} Parameter und {s} Seiten'),
+    'builtin': ('Rules in use: {p} general parameters and {s} sites', 'Verwendete Regeln: {p} allgemeine Parameter und {s} Seiten'),
     'try': ('Try it: paste a link', 'Ausprobieren: Link einfügen'),
     'ext_head': ('Browser extension', 'Browser-Erweiterung'),
     'ext_help': ('<b>How to install the extension</b><ol style="margin-top:2px;margin-bottom:2px"><li>Select your browser in the table below and click "Install in …".</li><li><b>Firefox-like browsers</b> open the signed package: confirm "Add" there.<br><b>Chrome-like browsers</b> (Vivaldi, Chrome, Edge, …) open their extensions page: switch on "Developer mode", click "Load unpacked" and paste the folder shown above.</li><li><b>Afterwards, and after every update of the extension, press "Apply" below.</b> It sets up the link between the browser and this program.</li></ol>',
@@ -220,7 +220,21 @@ TEXT = {
     'tst_row_clip': ('Clipboard', 'Zwischenablage'),
     'tst_row_browser': ('Browser extension', 'Browser-Erweiterung'),
     'tst_row_system': ('Link opener', 'Link-Öffner'),
-    'show_builtin': ('Show built-in rules', 'Eingebaute Regeln anzeigen'),
+    'rules_list': ('Rule list', 'Regelliste'),
+    'rules_update_now': ('Update now', 'Jetzt aktualisieren'),
+    'rules_updating': ('Downloading …', 'Lade …'),
+    'rules_reset': ('Use the rules that ship with the program', 'Mitgelieferte Regeln verwenden'),
+    'rules_auto': ('Check for a new list once a day', 'Einmal am Tag nach einer neuen Liste suchen'),
+    'rules_auto_note': ('Only this one download; no personal data is sent.', 'Nur dieser eine Download, es werden keine persönlichen Daten gesendet.'),
+    'rules_credit': ('The list is built outside of the program from our rules and the ClearURLs rules (LGPL-3.0, see NOTICE.md), published on GitHub and checked strictly before use.', 'Die Liste wird außerhalb des Programms aus unseren Regeln und den ClearURLs-Regeln (LGPL-3.0, siehe NOTICE.md) gebaut, auf GitHub veröffentlicht und vor der Nutzung streng geprüft.'),
+    'rules_downloaded': ('<b>Downloaded list</b>, version {v} ({b}): {g} general names, {s} sites', '<b>Heruntergeladene Liste</b>, Version {v} ({b}): {g} allgemeine Namen, {s} Seiten'),
+    'rules_shipped': ('<b>Rules that ship with the program</b>: {g} general names, {s} sites. No list downloaded yet.', '<b>Mit dem Programm gelieferte Regeln</b>: {g} allgemeine Namen, {s} Seiten. Noch keine Liste heruntergeladen.'),
+    'rules_checked': ('checked {w}', 'geprüft {w}'),
+    'just_now': ('just now', 'gerade eben'),
+    'min_ago': ('{n} min ago', 'vor {n} Min.'),
+    'h_ago': ('{n} h ago', 'vor {n} Std.'),
+    'd_ago': ('{n} d ago', 'vor {n} Tg.'),
+    'show_builtin': ('Show the rules in use', 'Verwendete Regeln anzeigen'),
 }
 LANG = 1 if QLocale.system().name().startswith('de') else 0
 
@@ -569,6 +583,32 @@ class SettingsWindow(QWidget):
         page, box = self.new_page(t('tab_rules'), t('rules_help'))
         rules = tb.user_rules()
 
+        g_list, l_list = self.group(t('rules_list'))
+        self.rules_status = QLabel('')
+        self.rules_status.setWordWrap(True)
+        self.rules_status.setTextFormat(Qt.TextFormat.RichText)
+        l_list.addWidget(self.rules_status)
+        list_row = QHBoxLayout()
+        self.rules_update_btn = QPushButton(QIcon.fromTheme('view-refresh'), t('rules_update_now'))
+        self.rules_update_btn.clicked.connect(self.update_rules_now)
+        self.rules_update_btn.setMinimumWidth(190)
+        reset_btn = QPushButton(QIcon.fromTheme('edit-undo'), t('rules_reset'))
+        reset_btn.clicked.connect(self.reset_rules)
+        list_row.addWidget(self.rules_update_btn)
+        list_row.addWidget(reset_btn)
+        list_row.addStretch(1)
+        l_list.addLayout(list_row)
+        self.rules_auto = QCheckBox(t('rules_auto'))
+        self.rules_auto.setChecked(bool(tb.load_config().get('rules_auto')))
+        self.rules_auto.toggled.connect(lambda on: self.save_cfg('rules_auto', on))
+        l_list.addWidget(self.rules_auto)
+        credit = QLabel(t('rules_auto_note') + ' ' + t('rules_credit'))
+        credit.setWordWrap(True)
+        credit.setStyleSheet('color: gray')
+        l_list.addWidget(credit)
+        box.addWidget(g_list)
+        self.rules_proc = None
+
         top = QHBoxLayout()
         top.setSpacing(14)
         g_global, l_global = self.group(t('global'))
@@ -633,7 +673,8 @@ class SettingsWindow(QWidget):
         merged = tb.load_rules()
         builtin = QPushButton(t('show_builtin'))
         builtin.clicked.connect(self.show_builtin)
-        footer.addWidget(QLabel(t('builtin', p=len(merged['global_remove']), s=len(merged['sites']))))
+        self.builtin_label = QLabel('')
+        footer.addWidget(self.builtin_label)
         footer.addWidget(builtin)
         footer.addStretch(1)
         self.saved_label = QLabel('')
@@ -644,6 +685,51 @@ class SettingsWindow(QWidget):
         box.addLayout(footer)
         box.addStretch(1)
         return page
+
+    @staticmethod
+    def ago(seconds):
+        minutes = int((time.time() - seconds) / 60)
+        if minutes < 1:
+            return t('just_now')
+        if minutes < 60:
+            return t('min_ago', n=minutes)
+        if minutes < 1440:
+            return t('h_ago', n=minutes // 60)
+        return t('d_ago', n=minutes // 1440)
+
+    def refresh_rules_status(self):
+        info = tb.rules_info()
+        if info['source'] == 'downloaded':
+            text = t('rules_downloaded', v=info['version'], b=info['built'], g=info['global'], s=info['sites'])
+        else:
+            text = t('rules_shipped', g=info['global'], s=info['sites'])
+        if info['checked']:
+            text += ' · ' + t('rules_checked', w=self.ago(info['checked']))
+        if info['error']:
+            text += '<br><span style="color:#c0392b">' + info['error'] + '</span>'
+        self.rules_status.setText(text)
+        self.builtin_label.setText(t('builtin', p=info['global'], s=info['sites']))
+
+    def update_rules_now(self):
+        if self.rules_proc is not None:
+            return
+        self.rules_update_btn.setEnabled(False)
+        self.rules_update_btn.setText(t('rules_updating'))
+        self.rules_proc = QProcess(self)
+        self.rules_proc.finished.connect(self.rules_update_finished)
+        self.rules_proc.start(sys.executable, [tb.SCRIPT, 'rules-update', '--force'])
+
+    def rules_update_finished(self, *_):
+        self.rules_proc = None
+        self.rules_update_btn.setEnabled(True)
+        self.rules_update_btn.setText(t('rules_update_now'))
+        self.refresh_rules_status()
+        self.update_try()
+
+    def reset_rules(self):
+        tb.rules_reset()
+        self.refresh_rules_status()
+        self.update_try()
 
     def add_site_row(self, domains, params):
         row = self.tbl.rowCount()
@@ -839,6 +925,7 @@ class SettingsWindow(QWidget):
     def showEvent(self, event):
         self.log_timer.start(1500)
         self.refresh_log()
+        self.refresh_rules_status()
         super().showEvent(event)
 
     def hideEvent(self, event):
@@ -1260,7 +1347,11 @@ class TrayApp:
         self.notice_timer = QTimer()
         self.notice_timer.timeout.connect(self.check_problems)
         self.notice_timer.timeout.connect(self.check_extension)
+        self.rules_timer = QTimer()
+        self.rules_timer.timeout.connect(self.check_rules)
+        self.rules_timer.start(3600 * 1000)  # looks at the clock hourly; a download happens at most once a day
         QTimer.singleShot(15000, self.check_extension)
+        QTimer.singleShot(30000, self.check_rules)
         self.notice_timer.start(3000)
         show_tray = tb.load_config()['tray_icon'] and QSystemTrayIcon.isSystemTrayAvailable()
         self.tray.setVisible(show_tray)
@@ -1320,6 +1411,11 @@ class TrayApp:
         if self.window is not None:
             for key, chk in self.window.checks.items():
                 sync(chk, option_state(key))
+
+    def check_rules(self):
+        """Download the published rule list when it is switched on and the last check is a day old."""
+        if tb.rules_due():
+            QProcess.startDetached(sys.executable, [tb.SCRIPT, 'rules-update'])
 
     def check_extension(self):
         """Tell the user once per available version when the browser still runs an older extension."""
