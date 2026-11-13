@@ -17,7 +17,7 @@ import time
 from PyQt6.QtCore import QLocale, QProcess, QSize, QTimer, QUrl, Qt
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QPainter, QPalette, QPixmap
-from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget,
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget,
                              QListWidgetItem, QMenu, QMessageBox, QScrollArea, QStackedWidget,
                              QPlainTextEdit, QPushButton, QSystemTrayIcon, QTableWidget, QTableWidgetItem, QTabWidget,
                              QVBoxLayout, QWidget)
@@ -73,6 +73,17 @@ TEXT = {
     'col_found': ('Found', 'Gefunden'),
     'col_reg': ('Registered', 'Eingerichtet'),
     'register': ('Apply', 'Übernehmen'),
+    'add_browser': ('Add browser…', 'Browser hinzufügen …'),
+    'remove_browser': ('Remove selected', 'Auswahl entfernen'),
+    'custom_tag': ('(added)', '(hinzugefügt)'),
+    'remove_builtin': ('Only browsers you added yourself can be removed. Untick the others instead.', 'Nur selbst hinzugefügte Browser lassen sich entfernen. Bei den anderen einfach den Haken entfernen.'),
+    'browser_name': ('Name', 'Name'),
+    'browser_kind': ('Based on', 'Basiert auf'),
+    'browser_folder': ('Link folder', 'Verbindungs-Ordner'),
+    'kind_firefox': ('Firefox (Floorp, LibreWolf, Zen, Waterfox, …)', 'Firefox (Floorp, LibreWolf, Zen, Waterfox, …)'),
+    'kind_chromium': ('Chromium (Edge, Opera, Brave, …)', 'Chromium (Edge, Opera, Brave, …)'),
+    'add_browser_hint': ('The link folder is where this browser looks for native messaging files; the suggestion fits most browsers. You still load the extension in that browser yourself (the same folder, in its extensions page).',
+                         'Im Verbindungs-Ordner sucht der Browser nach Native-Messaging-Dateien; der Vorschlag passt für die meisten Browser. Die Erweiterung lädst du im jeweiligen Browser weiterhin selbst (derselbe Ordner, auf dessen Erweiterungsseite).'),
     'native_hint': ('Tick the browsers whose extension should get the rules from this program. Unticking removes the link again.', 'Hake die Browser an, deren Erweiterung die Regeln von diesem Programm bekommen soll. Entfernst du den Haken, wird die Verbindung wieder gelöscht.'),
     'yes': ('yes', 'ja'),
     'no': ('no', 'nein'),
@@ -269,6 +280,61 @@ class ClipboardService:
 # --------------------------------------------------------------------------------------------------------------
 # Settings window
 # --------------------------------------------------------------------------------------------------------------
+
+class AddBrowserDialog(QDialog):
+    """Add a browser the app does not know: its name, whether it is Chromium- or Firefox-based, and the folder where
+    it looks for native messaging files (suggested from the type)."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setWindowTitle(t('add_browser'))
+        self.setMinimumWidth(520)
+        form = QFormLayout(self)
+        self.name = QLineEdit()
+        self.name.setPlaceholderText('Floorp')
+        self.kind = QComboBox()
+        self.kind.addItem(t('kind_firefox'), 'firefox')
+        self.kind.addItem(t('kind_chromium'), 'chromium')
+        self.folder = QLineEdit()
+        pick = QPushButton(QIcon.fromTheme('folder-open'), '')
+        pick.clicked.connect(self.browse)
+        row = QHBoxLayout()
+        row.addWidget(self.folder, 1)
+        row.addWidget(pick)
+        hint = QLabel(t('add_browser_hint'))
+        hint.setWordWrap(True)
+        hint.setStyleSheet('color: gray')
+        form.addRow(t('browser_name'), self.name)
+        form.addRow(t('browser_kind'), self.kind)
+        form.addRow(t('browser_folder'), row)
+        form.addRow(hint)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+        self.kind.currentIndexChanged.connect(self.suggest)
+        self.name.textChanged.connect(self.suggest)
+        self.suggest()
+
+    def suggest(self, *_):
+        if self.kind.currentData() == 'firefox':
+            self.folder.setText('~/.mozilla/native-messaging-hosts')
+        else:
+            self.folder.setText('~/.config/' + (self.name.text().strip().lower() or 'browser') + '/NativeMessagingHosts')
+
+    def browse(self):
+        chosen = QFileDialog.getExistingDirectory(self, t('browser_folder'), os.path.expanduser('~'))
+        if chosen:
+            self.folder.setText(chosen)
+
+    def accept(self):
+        if not self.name.text().strip() or not self.folder.text().strip():
+            return
+        super().accept()
+
+    def result_entry(self):
+        return {'name': self.name.text().strip(), 'kind': self.kind.currentData(), 'dir': self.folder.text().strip()}
+
 
 class SettingsWindow(QWidget):
     def __init__(self, app):
@@ -804,13 +870,13 @@ class SettingsWindow(QWidget):
         nat_hint.setWordWrap(True)
         nat_hint.setStyleSheet('color: gray')
         l_nat.addWidget(nat_hint)
-        self.native = QTableWidget(len(tb.NATIVE_BROWSERS), 3)
+        self.native = QTableWidget(0, 3)
         self.native.setHorizontalHeaderLabels([t('col_browser'), t('col_found'), t('col_reg')])
         header = self.native.horizontalHeader()
         header.setStretchLastSection(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        widths = (240, 100, 120)  # fixed width: the table does not stretch over the whole page
-        for column, width in enumerate(widths):
+        self.native_widths = (240, 100, 120)  # fixed width: the table does not stretch over the whole page
+        for column, width in enumerate(self.native_widths):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
             self.native.setColumnWidth(column, width)
         self.native.verticalHeader().setVisible(False)
@@ -818,21 +884,22 @@ class SettingsWindow(QWidget):
         self.native.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.native.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.native.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.native.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.native.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.native.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.native.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        # exactly as high as its rows, so it has no scrollbar of its own
-        self.native.setFixedHeight(header.height() + 30 * len(tb.NATIVE_BROWSERS) + 4)
-        self.native.setFixedWidth(sum(widths) + 4)
-        for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
-            item = QTableWidgetItem(name)
-            item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
-            self.native.setItem(i, 0, item)
-            self.native.setItem(i, 1, QTableWidgetItem(''))
-            self.native.setItem(i, 2, QTableWidgetItem(''))
+        self.native.setFixedWidth(sum(self.native_widths) + 4)
         l_nat.addWidget(self.native, alignment=Qt.AlignmentFlag.AlignLeft)
+        row_nat = QHBoxLayout()
         reg = QPushButton(QIcon.fromTheme('dialog-ok-apply'), t('register'))
         reg.clicked.connect(self.register_native)
-        l_nat.addWidget(reg, alignment=Qt.AlignmentFlag.AlignLeft)
+        add_browser = QPushButton(QIcon.fromTheme('list-add'), t('add_browser'))
+        add_browser.clicked.connect(self.add_browser)
+        self.remove_browser_btn = QPushButton(QIcon.fromTheme('list-remove'), t('remove_browser'))
+        self.remove_browser_btn.clicked.connect(self.remove_browser)
+        for b in (reg, add_browser, self.remove_browser_btn):
+            row_nat.addWidget(b)
+        row_nat.addStretch(1)
+        l_nat.addLayout(row_nat)
         box.addWidget(g_nat)
 
         g_open, l_open = self.group(t('opener_head'))
@@ -885,26 +952,39 @@ class SettingsWindow(QWidget):
             self.ext_installed.setText(state.get('version') or t('ext_none'))
             self.ext_state.setText(t('ext_ok'))
 
+    def fill_native_table(self):
+        """One row per known browser (built-in and added ones) with a checkbox, found? and set up?"""
+        entries = tb.browser_entries()
+        chosen = tb.load_config().get('native_browsers')
+        self.native.setRowCount(len(entries))
+        self.native.setFixedHeight(self.native.horizontalHeader().height() + 30 * len(entries) + 4)
+        for i, entry in enumerate(entries):
+            found = tb.browser_found(entry)
+            registered = os.path.exists(tb.native_manifest_path(entry))
+            first = QTableWidgetItem(entry['name'] + (' ' + t('custom_tag') if entry.get('custom') else ''))
+            first.setData(Qt.ItemDataRole.UserRole, entry['id'])
+            first.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable if found
+                           else Qt.ItemFlag.ItemIsSelectable)
+            wanted = found and (chosen is None or entry['id'] in chosen)  # first time: all installed browsers ticked
+            first.setCheckState(Qt.CheckState.Checked if wanted else Qt.CheckState.Unchecked)
+            first.setToolTip(os.path.expanduser(entry['dir']))
+            self.native.setItem(i, 0, first)
+            for column, flag in ((1, found), (2, registered)):
+                item = QTableWidgetItem(t('yes') if flag else t('no'))
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                self.native.setItem(i, column, item)
+
     def refresh_browser_tab(self):
         self.refresh_ext_status()
-        chosen = tb.load_config().get('native_browsers')
-        for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
-            found = os.path.isdir(tb.browser_dir(folder))
-            registered = os.path.exists(tb.native_manifest_path(folder))
-            first = self.native.item(i, 0)
-            flags = Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled if found else Qt.ItemFlag.NoItemFlags
-            first.setFlags(flags)
-            wanted = found and (registered if chosen is None else folder in chosen)
-            first.setCheckState(Qt.CheckState.Checked if wanted else Qt.CheckState.Unchecked)
-            self.native.item(i, 1).setText(t('yes') if found else t('no'))
-            self.native.item(i, 2).setText(t('yes') if registered else t('no'))
+        self.fill_native_table()
         self.opener_status.setText(t('opener_status', d=tb.default_browser() or '?'))
 
     def register_native(self):
         """Give the extension its link to the program in the checked browsers, remove it from the unchecked ones."""
         on, off = [], []
-        for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
-            (on if self.native.item(i, 0).checkState() == Qt.CheckState.Checked else off).append(folder)
+        for i in range(self.native.rowCount()):
+            item = self.native.item(i, 0)
+            (on if item.checkState() == Qt.CheckState.Checked else off).append(item.data(Qt.ItemDataRole.UserRole))
         written = tb.install_native(on)
         removed = tb.uninstall_native(off)
         cfg = tb.load_config()
@@ -912,6 +992,34 @@ class SettingsWindow(QWidget):
         tb.save_config(cfg)
         tb.diag('info', 'Browser link for the extension: set up %d, removed %d' % (len(written), len(removed)))
         self.refresh_browser_tab()
+
+    def add_browser(self):
+        dialog = AddBrowserDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        entry = dialog.result_entry()
+        cfg = tb.load_config()
+        customs = [c for c in (cfg.get('custom_browsers') or []) if c['name'] != entry['name']] + [entry]
+        cfg['custom_browsers'] = customs
+        tb.save_config(cfg)
+        tb.diag('info', 'Added the browser "%s" (%s) with link folder %s' % (entry['name'], entry['kind'], entry['dir']))
+        self.fill_native_table()
+
+    def remove_browser(self):
+        rows = self.native.selectionModel().selectedRows()
+        if not rows:
+            return
+        browser_id = self.native.item(rows[0].row(), 0).data(Qt.ItemDataRole.UserRole)
+        if not browser_id.startswith('custom:'):
+            QMessageBox.information(self, t('title'), t('remove_builtin'))
+            return
+        cfg = tb.load_config()
+        entry = next((e for e in tb.browser_entries() if e['id'] == browser_id), None)
+        if entry:
+            tb.uninstall_native([browser_id])
+        cfg['custom_browsers'] = [c for c in (cfg.get('custom_browsers') or []) if 'custom:' + c['name'] != browser_id]
+        tb.save_config(cfg)
+        self.fill_native_table()
 
     def install_entry(self):
         tb.install_handler()

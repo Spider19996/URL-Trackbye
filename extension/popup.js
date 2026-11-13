@@ -4,7 +4,7 @@ const HOST = 'de.trackbye.host';
 const VERSION = chrome.runtime.getManifest().version;
 const T = {
   en: {
-    subtitle: 'Removes tracking from links', prefs: 'Preferences', page: 'This page', stats: 'Statistics',
+    subtitle: 'Removes tracking from links', openProgram: 'Open program settings', prefs: 'Preferences', page: 'This page', stats: 'Statistics',
     enabled: 'Clean links automatically', site: 'Not on this site:', sync: 'Refresh', synced: 'Updated {t}',
     rulesProgram: 'Rules from the program', rulesBundled: 'Bundled rules', ruleCount: '{n} rules',
     address: 'Address of this tab', clean: 'Without tracking', copy: 'Copy clean address', copied: 'Copied.',
@@ -15,7 +15,7 @@ const T = {
     justNow: 'just now', minAgo: '{n} min ago', hAgo: '{n} h ago', dAgo: '{n} d ago',
   },
   de: {
-    subtitle: 'Entfernt Tracking aus Links', prefs: 'Einstellungen', page: 'Diese Seite', stats: 'Statistik',
+    subtitle: 'Entfernt Tracking aus Links', openProgram: 'Programm-Einstellungen öffnen', prefs: 'Einstellungen', page: 'Diese Seite', stats: 'Statistik',
     enabled: 'Links automatisch säubern', site: 'Nicht auf dieser Seite:', sync: 'Aktualisieren', synced: 'Aktualisiert {t}',
     rulesProgram: 'Regeln vom Programm', rulesBundled: 'Mitgelieferte Regeln', ruleCount: '{n} Regeln',
     address: 'Adresse dieses Tabs', clean: 'Ohne Tracking', copy: 'Saubere Adresse kopieren', copied: 'Kopiert.',
@@ -94,6 +94,8 @@ async function showStatus() {
   const { status } = await chrome.storage.local.get({ status: null });
   const program = await ask({ type: 'version' });
   $('dot').classList.toggle('on', !!program);
+  $('openSettings').hidden = !program;
+  $('openSettings').title = t.openProgram;
   $('progState').textContent = program ? t.progOn : t.progOff;
   if (!status) { $('statusTitle').textContent = '…'; return; }
   $('statusTitle').textContent = status.source === 'program' ? t.rulesProgram : t.rulesBundled;
@@ -143,7 +145,8 @@ async function main() {
   $('host').textContent = host;
   const s = await chrome.storage.local.get({ enabled: true, disabledSites: [] });
   $('enabled').checked = s.enabled;
-  $('site').checked = s.disabledSites.includes(host);
+  const known = await ask({ type: 'rules' });
+  $('site').checked = s.disabledSites.includes(host) || !!(known && known.rules && (known.rules.exclude_hosts || []).includes(host));
   $('site').disabled = !host;
   await showStatus();
   setTimeout(showStatus, 1200);
@@ -152,6 +155,12 @@ async function main() {
   $('site').addEventListener('change', async () => {
     const cur = (await chrome.storage.local.get({ disabledSites: [] })).disabledSites.filter((h) => h !== host);
     await chrome.storage.local.set({ disabledSites: $('site').checked ? cur.concat(host) : cur });
+    // also tell the program, so its clipboard cleaning and link opener leave this site alone, too
+    ask({ type: 'exclude', host, on: $('site').checked });
+  });
+  $('openSettings').addEventListener('click', async () => {
+    await ask({ type: 'open-settings' });
+    window.close();
   });
   $('sync').addEventListener('click', async () => {
     chrome.runtime.sendMessage({ type: 'refresh' }).catch(() => {});

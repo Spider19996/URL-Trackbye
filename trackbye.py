@@ -46,7 +46,7 @@ EVENTS_MAX = 300
 EXTENSION_STATE = os.path.join(STATE_DIR, 'extension.json')
 RELOAD_TRIGGER = os.path.join(STATE_DIR, 'reload-extension')
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
-                  'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify'], 'native_browsers': None}
+                  'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify'], 'native_browsers': None, 'custom_browsers': []}
 SCRIPT = os.path.realpath(__file__)
 VERSION = '0.6.0'
 
@@ -365,24 +365,40 @@ def cmd_install_handler(args):
         print('To use it as default browser, run again with --set-default or pick it in the system settings.')
 
 
-NATIVE_BROWSERS = {'Vivaldi': 'vivaldi', 'Chromium': 'chromium', 'Google Chrome': 'google-chrome',
-                   'Brave': 'BraveSoftware/Brave-Browser', 'Firefox': 'firefox'}
 FIREFOX_ID = 'url-trackbye@spider19996'  # must match browser_specific_settings in extension/manifest.json
 
+# Browsers the app knows. "dir" is where the browser looks for native messaging host files, "detect" tells whether
+# the browser is installed. Chromium-like browsers want the extension origin, Firefox-like ones the add-on id.
+BUILTIN_BROWSERS = [
+    {'id': 'vivaldi', 'name': 'Vivaldi', 'kind': 'chromium', 'dir': '~/.config/vivaldi/NativeMessagingHosts', 'detect': '~/.config/vivaldi'},
+    {'id': 'chromium', 'name': 'Chromium', 'kind': 'chromium', 'dir': '~/.config/chromium/NativeMessagingHosts', 'detect': '~/.config/chromium'},
+    {'id': 'google-chrome', 'name': 'Google Chrome', 'kind': 'chromium', 'dir': '~/.config/google-chrome/NativeMessagingHosts', 'detect': '~/.config/google-chrome'},
+    {'id': 'BraveSoftware/Brave-Browser', 'name': 'Brave', 'kind': 'chromium',
+     'dir': '~/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts', 'detect': '~/.config/BraveSoftware/Brave-Browser'},
+    {'id': 'firefox', 'name': 'Firefox', 'kind': 'firefox', 'dir': '~/.mozilla/native-messaging-hosts', 'detect': '~/.mozilla/firefox'},
+]
 
-def browser_dir(folder):
-    """Where a browser keeps its profile data (used to find out whether it is installed)."""
-    return os.path.expanduser('~/.mozilla/firefox' if folder == 'firefox' else '~/.config/' + folder)
+
+def browser_entries():
+    """Built-in browsers plus the ones the user added (config "custom_browsers": name, kind, dir)."""
+    entries = [dict(b) for b in BUILTIN_BROWSERS]
+    for c in load_config().get('custom_browsers') or []:
+        entries.append({'id': 'custom:' + c['name'], 'name': c['name'], 'kind': c['kind'], 'dir': c['dir'],
+                        'detect': c['dir'], 'custom': True})
+    return entries
 
 
-def native_manifest_path(folder):
-    if folder == 'firefox':
-        return os.path.expanduser('~/.mozilla/native-messaging-hosts/' + HOST_NAME + '.json')
-    return os.path.join(os.path.expanduser('~/.config/' + folder), 'NativeMessagingHosts', HOST_NAME + '.json')
+def browser_found(entry):
+    path = os.path.expanduser(entry['detect'])
+    return os.path.isdir(path) or (entry.get('custom') and os.path.isdir(os.path.dirname(path.rstrip('/'))))
 
 
-def install_native(folders=None):
-    """Register the native messaging host for the given browsers (default: all that are installed)."""
+def native_manifest_path(entry):
+    return os.path.join(os.path.expanduser(entry['dir']), HOST_NAME + '.json')
+
+
+def install_native(ids=None):
+    """Register the native messaging host for the browsers with these ids (default: all installed ones)."""
     base = {
         'name': HOST_NAME,
         'description': 'URL Trackbye: shares the cleaning rules with the browser extension',
@@ -390,25 +406,25 @@ def install_native(folders=None):
         'type': 'stdio',
     }
     written = []
-    for folder in folders or NATIVE_BROWSERS.values():
-        if not os.path.isdir(browser_dir(folder)):
+    for entry in browser_entries():
+        if (ids is not None and entry['id'] not in ids) or not browser_found(entry):
             continue
         manifest = dict(base)
-        if folder == 'firefox':
+        if entry['kind'] == 'firefox':
             manifest['allowed_extensions'] = [FIREFOX_ID]
         else:
             manifest['allowed_origins'] = ['chrome-extension://' + EXTENSION_ID + '/']
-        target = native_manifest_path(folder)
+        target = native_manifest_path(entry)
         write_json(target, manifest)
         written.append(target)
     return written
 
 
-def uninstall_native(folders):
+def uninstall_native(ids):
     removed = []
-    for folder in folders:
-        target = native_manifest_path(folder)
-        if os.path.exists(target):
+    for entry in browser_entries():
+        target = native_manifest_path(entry)
+        if entry['id'] in ids and os.path.exists(target):
             os.remove(target)
             removed.append(target)
     return removed
@@ -547,6 +563,21 @@ def cmd_native():
             send({'ok': True})
         elif kind == 'diag':
             diag(str(msg.get('level', 'error')), str(msg.get('message', '')), 'browser extension')
+            send({'ok': True})
+        elif kind == 'open-settings':
+            # same as starting the app by hand: opens the window of the running app, or starts the app
+            subprocess.Popen([sys.executable, SCRIPT], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+            send({'ok': True})
+        elif kind == 'exclude':
+            # the extension's "not on this site" switch, kept in the program's own list so every part agrees
+            host = str(msg.get('host', '')).strip().lower()
+            if host:
+                rules = user_rules()
+                hosts = [h for h in rules['exclude_hosts'] if h != host]
+                rules['exclude_hosts'] = hosts + [host] if msg.get('on') else hosts
+                save_user_rules(rules)
+                diag('info', '%s %s the list of sites that are never changed' % (host, 'added to' if msg.get('on') else 'removed from'))
             send({'ok': True})
         elif kind == 'stats':
             entries = read_log()

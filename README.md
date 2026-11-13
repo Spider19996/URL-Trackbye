@@ -89,6 +89,20 @@ The same extension folder works in Firefox 128+ (one code base for both browsers
 Tested with Firefox 158: a link with tracking parameters is cleaned before it loads. Snap or Flatpak versions of Firefox
 look for the native messaging file in other places and are not supported yet.
 
+#### Signing for Firefox (permanent install)
+
+`python3 tools/package_extension.py` writes `dist/url-trackbye-firefox-<version>.zip`. Upload it at
+<https://addons.mozilla.org/developers/> ("Submit a New Add-on", then **On your own** = unlisted). It is signed
+automatically after a short check; download the `.xpi` and open it in Firefox (File > Open, or drag it onto the
+window). Every new extension version needs a new upload (the version number must be higher). Needs a free Mozilla
+account; nothing is published.
+
+#### Other browsers
+
+The app's Browser page has **Add browser...** for browsers it does not know (Floorp, LibreWolf, Zen, Edge, Opera, ...):
+give a name, say whether it is Firefox- or Chromium-based and confirm the folder where it looks for native messaging
+files (the suggestion fits most). You still load the extension in that browser yourself.
+
 ### Links from other apps (Discord, ...)
 
 ```bash
