@@ -1,3 +1,9 @@
+# URL Trackbye - removes tracking parameters from links.
+# Copyright (C) 2026 Robin Zimmermann
+# SPDX-License-Identifier: GPL-3.0-or-later
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+# version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE file or <https://www.gnu.org/licenses/>.
 """URL Trackbye tray app: runs in the background, cleans copied links and has a settings window.
 
 Started by `trackbye tray` (needs PyQt6). The clipboard is watched by `wl-paste --watch` (Wayland), which calls
@@ -11,7 +17,7 @@ import time
 from PyQt6.QtCore import QLocale, QProcess, QSize, QTimer, QUrl, Qt
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QPainter, QPalette, QPixmap
-from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget,
                              QListWidgetItem, QMenu, QMessageBox, QScrollArea, QStackedWidget,
                              QPlainTextEdit, QPushButton, QSystemTrayIcon, QTableWidget, QTableWidgetItem, QTabWidget,
                              QVBoxLayout, QWidget)
@@ -78,12 +84,14 @@ TEXT = {
     'restore_default': ('Restore previous default browser', 'Vorherigen Standardbrowser wiederherstellen'),
     'confirm_default': ('Make URL Trackbye your default browser? You can restore the previous one here at any time.',
                         'URL Trackbye als Standardbrowser festlegen? Den vorherigen kannst du hier jederzeit wiederherstellen.'),
-    'about': ('Removes tracking parameters from links: in the clipboard, in links opened by other apps and in the browser (extension).\nMIT license.',
-              'Entfernt Tracking-Parameter aus Links: in der Zwischenablage, in Links aus anderen Programmen und im Browser (Erweiterung).\nMIT-Lizenz.'),
+    'about': ('Removes tracking parameters from links: in the clipboard, in links opened by other apps and in the browser (extension).\nFree software under the GNU GPL v3.',
+              'Entfernt Tracking-Parameter aus Links: in der Zwischenablage, in Links aus anderen Programmen und im Browser (Erweiterung).\nFreie Software unter der GNU GPL v3.'),
     'tab_log': ('Cleaned links', 'Gesäuberte Links'),
     'tray_icon': ('Show the tray icon (if hidden: start URL Trackbye again or use the application menu entry to open this window)',
                   'Tray-Symbol anzeigen (wenn ausgeblendet: URL Trackbye erneut starten oder den Eintrag im Anwendungsmenü nutzen)'),
     'log_on': ('Keep a log of cleaned links', 'Protokoll über gesäuberte Links führen'),
+    'quit_confirm': ('Really quit URL Trackbye? Copied links are no longer cleaned until you start it again.',
+                     'URL Trackbye wirklich beenden? Kopierte Links werden dann nicht mehr gesäubert, bis du es wieder startest.'),
     'quit_app': ('Quit URL Trackbye', 'URL Trackbye beenden'),
     'log_help': ('Newest first. The log is stored on this computer only (up to 500 entries).',
                  'Neueste zuerst. Das Protokoll liegt nur auf diesem Computer (bis zu 500 Einträge).'),
@@ -267,8 +275,8 @@ class SettingsWindow(QWidget):
         self.app = app
         self.setWindowTitle(t('title'))
         self.setWindowIcon(QIcon(ICON))
-        self.resize(920, 640)
-        self.setMinimumSize(800, 540)
+        self.resize(980, 680)
+        self.setMinimumSize(900, 560)
         # Sidebar with icons on the left, one page at a time on the right.
         pages = (('tab_general', 'preferences-system', '⚙', self.general_tab),
                  ('tab_rules', 'view-filter', '≡', self.rules_tab),
@@ -278,16 +286,19 @@ class SettingsWindow(QWidget):
                  ('tab_events', 'dialog-information', '!', self.events_tab),
                  ('tab_about', 'help-about', 'i', self.about_tab))
         self.nav = QListWidget()
-        self.nav.setFixedWidth(200)
+        self.nav.setFixedWidth(190)
         self.nav.setIconSize(QSize(24, 24))
         self.nav.setSpacing(2)
         self.nav.setStyleSheet('QListWidget { border: none; background: transparent; } '
-                               'QListWidget::item { padding: 8px 6px; border-radius: 6px; }')
+                               'QListWidget::item { padding: 8px 6px; border-radius: 6px; color: palette(window-text); } '
+                               'QListWidget::item:hover { background: palette(midlight); } '
+                               'QListWidget::item:selected { background: palette(highlight); color: palette(highlighted-text); }')
         self.stack = QStackedWidget()
         for key, icon_name, glyph, builder in pages:
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             scroll.setWidget(builder())
             self.stack.addWidget(scroll)
             icon = QIcon.fromTheme(icon_name)
@@ -295,11 +306,23 @@ class SettingsWindow(QWidget):
             self.nav.addItem(item)
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav.setCurrentRow(0)
+        quit_btn = QPushButton(QIcon.fromTheme('application-exit'), t('quit_app'))
+        quit_btn.clicked.connect(self.confirm_quit)
+        left = QVBoxLayout()
+        left.setContentsMargins(0, 0, 8, 8)
+        left.addWidget(self.nav, 1)
+        left.addWidget(quit_btn)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 8, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.nav)
+        layout.addLayout(left)
         layout.addWidget(self.stack, 1)
+
+    def confirm_quit(self):
+        answer = QMessageBox.question(self, t('title'), t('quit_confirm'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                      QMessageBox.StandardButton.No)
+        if answer == QMessageBox.StandardButton.Yes:
+            self.app.quit()
 
     def new_page(self, title, subtitle=''):
         page = QWidget()
@@ -375,9 +398,6 @@ class SettingsWindow(QWidget):
         l3.addWidget(bh)
         box.addWidget(g3)
         box.addStretch(1)
-        quit_btn = QPushButton(QIcon.fromTheme('application-exit'), t('quit_app'))
-        quit_btn.clicked.connect(self.app.quit)
-        box.addWidget(quit_btn, alignment=Qt.AlignmentFlag.AlignRight)
         return page
 
     def save_quick(self):
@@ -779,6 +799,11 @@ class SettingsWindow(QWidget):
         self.native.setHorizontalHeaderLabels([t('col_browser'), t('col_found'), t('col_reg')])
         self.native.horizontalHeader().setStretchLastSection(True)
         self.native.setFixedHeight(150)
+        header = self.native.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.native.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.native.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         self.native.verticalHeader().setVisible(False)

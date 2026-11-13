@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# URL Trackbye - removes tracking parameters from links.
+# Copyright (C) 2026 Robin Zimmermann
+# SPDX-License-Identifier: GPL-3.0-or-later
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+# version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE file or <https://www.gnu.org/licenses/>.
 """trackbye - remove tracking parameters from links, system-wide.
 
 One small program with several jobs that all use the same rules (rules.json):
@@ -9,6 +15,7 @@ One small program with several jobs that all use the same rules (rules.json):
   trackbye open [URL...]     clean the URLs and open them in the real browser (use as default browser)
   trackbye install-handler   write the desktop entry that makes `open` selectable as default browser
   trackbye install-native    register the native messaging host for the browser extension
+  trackbye reload-extension  ask the browser extension to reload itself (after changing its files)
   trackbye native            native messaging host (started by the browser extension, not by you)
 
 Only the Python standard library is used. Rules: exact parameter names, matched per site (domain and subdomains).
@@ -21,6 +28,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 
@@ -35,10 +43,11 @@ LOG_MAX = 500
 EVENTS_PATH = os.path.join(STATE_DIR, 'events.jsonl')
 EVENTS_MAX = 300
 EXTENSION_STATE = os.path.join(STATE_DIR, 'extension.json')
+RELOAD_TRIGGER = os.path.join(STATE_DIR, 'reload-extension')
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
                   'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify']}
 SCRIPT = os.path.realpath(__file__)
-VERSION = '0.5.0'
+VERSION = '0.6.0'
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -188,9 +197,14 @@ def log_event(source, before, after):
     now = time.time()
     entries = read_log()
     last = entries[-1] if entries else None
-    if last and last.get('src') == source and last.get('to') == before and now - last.get('t', 0) < 3:
+    if last and last.get('src') == source and now - last.get('t', 0) < 3 and last.get('to') in (before, after):
+        # another pass over the same link (the browser cleans in several steps, reported in any order)
+        gone = last.get('removed', [])
+        gone += [k for k in removed_params(before, after) if k not in gone]
+        last['removed'] = gone
         last['to'] = after
-        last['removed'] = last.get('removed', []) + removed_params(before, after)
+        if len(query_keys(before)) > len(query_keys(last.get('from', ''))):
+            last['from'] = before
     else:
         entries.append({'t': now, 'src': source, 'from': before, 'to': after, 'removed': removed_params(before, after)})
     write_log(entries)
@@ -451,24 +465,73 @@ def send_message(obj):
 
 
 def cmd_native():
+    """Native messaging host. One-shot calls get one answer per message. An extension that opens a long-lived port
+    starts with {"type": "hello"}; then this process also pushes {"type": "reload"} when the extension files on disk
+    have a different version than the running extension, or when `trackbye reload-extension` was run."""
+    lock = threading.Lock()
+    state = {'ext': None, 'watching': False}
+
+    def send(obj):
+        with lock:
+            send_message(obj)
+
+    def mtime():
+        try:
+            return os.stat(RELOAD_TRIGGER).st_mtime_ns
+        except OSError:
+            return 0
+
+    def watch():
+        seen_trigger = mtime()
+        asked_for = None
+        while True:
+            time.sleep(1)
+            disk = extension_version()
+            if mtime() != seen_trigger:
+                seen_trigger = mtime()
+                diag('info', 'Asking the browser extension to reload (requested)')
+                send({'type': 'reload', 'reason': 'requested'})
+            elif state['ext'] and disk and disk != state['ext'] and asked_for != disk:
+                asked_for = disk
+                diag('info', 'Asking the browser extension to reload (%s -> %s)' % (state['ext'], disk))
+                send({'type': 'reload', 'reason': 'version'})
+
     while True:
         msg = read_message()
         if msg is None:
             return
         kind = msg.get('type')
         note_extension(msg)
-        if kind == 'rules':
-            send_message({'ok': True, 'rules': load_rules()})
+        if kind == 'hello':
+            state['ext'] = msg.get('ext')
+            diag('info', 'Browser extension %s connected' % (msg.get('ext') or '(old version)'))
+            if not state['watching']:
+                state['watching'] = True
+                threading.Thread(target=watch, daemon=True).start()
+            send({'ok': True})
+        elif kind == 'rules':
+            send({'ok': True, 'rules': load_rules()})
         elif kind == 'log':
             url = str(msg.get('url', ''))
             log_event(str(msg.get('source', 'browser')), url, clean_url(url, load_rules()))
-            send_message({'ok': True})
+            send({'ok': True})
+        elif kind == 'diag':
+            diag(str(msg.get('level', 'error')), str(msg.get('message', '')), 'browser extension')
+            send({'ok': True})
         elif kind == 'version':
-            send_message({'ok': True, 'version': extension_version(), 'program': VERSION})
+            send({'ok': True, 'version': extension_version(), 'program': VERSION})
         elif kind == 'clean':
-            send_message({'ok': True, 'url': clean_url(str(msg.get('url', '')), load_rules())})
+            send({'ok': True, 'url': clean_url(str(msg.get('url', '')), load_rules())})
         else:
-            send_message({'ok': True, 'pong': True})
+            send({'ok': True, 'pong': True})
+
+
+def cmd_reload_extension():
+    """Ask every connected browser extension to reload itself (used after changing extension files)."""
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(RELOAD_TRIGGER, 'w', encoding='utf-8') as f:
+        f.write(str(time.time()))
+    print('Asked the browser extension to reload (needs the extension 0.6.0+ loaded and the rule sharing set up).')
 
 
 def main(argv):
@@ -513,6 +576,8 @@ def run(argv):
         cmd_install_native()
     elif cmd == 'native':
         cmd_native()
+    elif cmd == 'reload-extension':
+        cmd_reload_extension()
     else:
         print(__doc__)
         return 0 if cmd in ('help', '-h', '--help') else 2

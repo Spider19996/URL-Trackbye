@@ -1,4 +1,5 @@
 import { cleanUrl } from './cleaner.js';
+import { buildRules } from './dnr.js';
 
 const HOST = 'de.trackbye.host';
 const VERSION = chrome.runtime.getManifest().version; // reported to the program, which warns when it is outdated
@@ -18,22 +19,6 @@ async function loadRules() {
   return { rules: bundled, source: 'bundled' };
 }
 
-const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-function redirectRule(id, names, domains, excluded) {
-  const condition = {
-    regexFilter: '[?&](' + names.map(escapeRegex).join('|') + ')(=|&|#|$)',
-    resourceTypes: ['main_frame', 'sub_frame'],
-  };
-  if (domains) condition.requestDomains = domains;
-  if (excluded.length) condition.excludedRequestDomains = excluded;
-  return {
-    id, priority: 1,
-    action: { type: 'redirect', redirect: { transform: { queryTransform: { removeParams: names } } } },
-    condition,
-  };
-}
-
 // Colored icon while cleaning, gray icon while switched off.
 function setIconState(enabled) {
   const prefix = enabled ? 'icon' : 'off';
@@ -45,20 +30,34 @@ async function applyRules() {
   const settings = await getSettings();
   setIconState(settings.enabled);
   const { rules, source } = await loadRules();
-  const excluded = (rules.exclude_hosts || []).concat(settings.disabledSites);
-  const add = [];
-  if (settings.enabled) {
-    let id = 1;
-    if ((rules.global_remove || []).length) add.push(redirectRule(id++, rules.global_remove, null, excluded));
-    for (const site of rules.sites || []) {
-      if (site.remove && site.remove.length && site.hosts && site.hosts.length) {
-        add.push(redirectRule(id++, site.remove, site.hosts, excluded));
-      }
-    }
+  const add = settings.enabled ? buildRules(rules, settings.disabledSites) : [];
+  try {
+    const old = await chrome.declarativeNetRequest.getDynamicRules();
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: old.map((r) => r.id), addRules: add });
+  } catch (e) {
+    // Without these rules nothing is cleaned in the browser: tell the program, so it shows up in its Messages.
+    reportDiag('error', 'The browser extension could not install its cleaning rules: ' + e.message);
+    throw e;
   }
-  const old = await chrome.declarativeNetRequest.getDynamicRules();
-  await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: old.map((r) => r.id), addRules: add });
   await chrome.storage.local.set({ status: { source, ruleCount: add.length, time: Date.now() } });
+}
+
+// Long-lived connection to the program: it can tell this extension to reload itself right away (new version on disk,
+// or `trackbye reload-extension`). The open port also keeps this service worker alive.
+let port = null;
+function connectHost() {
+  if (port) return;
+  try {
+    port = chrome.runtime.connectNative(HOST);
+    port.onMessage.addListener((msg) => { if (msg && msg.type === 'reload') chrome.runtime.reload(); });
+    port.onDisconnect.addListener(() => { port = null; void chrome.runtime.lastError; });
+    port.postMessage({ type: 'hello', ext: VERSION });
+  } catch (e) { port = null; }
+}
+connectHost();
+
+function reportDiag(level, message) {
+  chrome.runtime.sendNativeMessage(HOST, { type: 'diag', level, message, ext: VERSION }).catch(() => {});
 }
 
 // Tell the program which links the browser cleaned, so they show up in its log. Only an unpacked extension gets these
@@ -114,6 +113,7 @@ async function checkForUpdate() {
 }
 
 async function refresh() {
+  connectHost();
   await checkForUpdate();
   await applyRules();
 }

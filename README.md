@@ -12,7 +12,7 @@ All parts share one rule list (`rules.json`). It is **not radical**: only known 
 search terms (`q`), video times (`t`), playlists (`list`), product variants (`th`, `psc`) etc. stay. Login hosts are
 excluded, and the extension can be switched off per site. No network access, no telemetry, Python standard library only.
 
-Written from scratch for KDE Plasma on Wayland with Vivaldi/Chrome; MIT licensed.
+Written from scratch for KDE Plasma on Wayland with Vivaldi/Chrome. Free software under the GNU GPL v3 or later.
 
 ## The app
 
@@ -114,3 +114,8 @@ when its version differs, so unrelated program updates never do). A test checks 
 `extension/` bump `version` in `extension/manifest.json` and run `python3 tools/extension_version.py stamp`.
 
 `extension/rules.json` must be a copy of `rules.json` (a test checks it): `cp rules.json extension/rules.json`.
+
+## License
+
+Copyright (C) 2026 Robin Zimmermann. URL Trackbye is free software: you can redistribute it and/or modify it under the terms
+of the GNU General Public License v3.0 (see [LICENSE](LICENSE)); it comes without any warranty.
