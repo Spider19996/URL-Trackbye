@@ -36,7 +36,8 @@ TEXT = {
     'clip': ('Clean copied links', 'Kopierte Links säubern'),
     'notify': ('Show a notification when a link was cleaned', 'Benachrichtigung zeigen, wenn ein Link gesäubert wurde'),
     'autostart': ('Start with the desktop session', 'Mit der Desktop-Sitzung starten'),
-    'browser': ('Your browser (command)', 'Dein Browser (Befehl)'),
+    'browser': ('Your browser',
+    'Dein Browser'),
     'settings': ('Settings…', 'Einstellungen…'),
     'quit': ('Quit', 'Beenden'),
     'tab_general': ('General', 'Allgemein'),
@@ -45,7 +46,12 @@ TEXT = {
     'tab_about': ('About', 'Info'),
     'grp_cleaning': ('Link cleaning', 'Links säubern'),
     'grp_start': ('Start and tray symbol', 'Start und Tray-Symbol'),
-    'browser_hint': ('Used when URL Trackbye opens a link for another app and for the browser test.', 'Wird genutzt, wenn URL Trackbye einen Link für ein anderes Programm öffnet und für den Browser-Test.'),
+    'other_program': ('Other program…', 'Anderes Programm …'),
+    'browser_command': ('Command:', 'Befehl:'),
+    'browser_current_other': ('{c}  (other)', '{c}  (anderes Programm)'),
+    'browser_invalid': ('"{c}" is not a program that can be started. The setting was not changed.', '„{c}“ ist kein Programm, das gestartet werden kann. Die Einstellung wurde nicht geändert.'),
+    'browser_hint': ('The program that opens links when another app hands one over (and for the browser test). Pick an installed browser, or choose any other program.',
+    'Das Programm, das Links öffnet, wenn ein anderes Programm einen übergibt (und für den Browser-Test). Wähle einen installierten Browser oder ein beliebiges anderes Programm.'),
     'sub_general': ('Everything that works without further setup.', 'Alles, was ohne weitere Einrichtung funktioniert.'),
     'sub_browser': ('Connect your browser and your other apps.', 'Verbinde deinen Browser und deine anderen Programme.'),
     'tab_test': ('Test', 'Test'),
@@ -481,9 +487,28 @@ class SettingsWindow(QWidget):
         box.addWidget(quick)
 
         g3, l3 = self.group(t('browser'))
+        pick_row = QHBoxLayout()
+        self.browser_combo = QComboBox()
+        self.browser_combo.setMinimumWidth(260)
+        pick_row.addWidget(self.browser_combo)
+        other_btn = QPushButton(QIcon.fromTheme('document-open'), t('other_program'))
+        other_btn.clicked.connect(self.choose_other_program)
+        pick_row.addWidget(other_btn)
+        pick_row.addStretch(1)
+        l3.addLayout(pick_row)
+        command_row = QHBoxLayout()
+        command_row.addWidget(QLabel(t('browser_command')))
         self.edit_browser = QLineEdit(cfg['browser'])
-        self.edit_browser.editingFinished.connect(lambda: self.save_cfg('browser', self.edit_browser.text().strip() or 'vivaldi-stable'))
-        l3.addWidget(self.edit_browser)
+        self.edit_browser.editingFinished.connect(lambda: self.set_browser_command(self.edit_browser.text()))
+        command_row.addWidget(self.edit_browser, 1)
+        l3.addLayout(command_row)
+        self.browser_note = QLabel('')
+        self.browser_note.setWordWrap(True)
+        self.browser_note.setStyleSheet('color: #c0392b')
+        self.browser_note.setVisible(False)
+        l3.addWidget(self.browser_note)
+        self.fill_browser_combo()
+        self.browser_combo.activated.connect(self.browser_picked)
         bh = QLabel(t('browser_hint'))
         bh.setWordWrap(True)
         bh.setStyleSheet('color: gray')
@@ -491,6 +516,44 @@ class SettingsWindow(QWidget):
         box.addWidget(g3)
         box.addStretch(1)
         return page
+
+    def fill_browser_combo(self):
+        """Installed browsers (found on the PATH), the current command if it is none of them, and nothing else."""
+        current = tb.load_config()['browser']
+        self.browser_combo.blockSignals(True)
+        self.browser_combo.clear()
+        known = [(e['name'], tb.browser_binary(e)) for e in tb.browser_entries() if tb.browser_binary(e)]
+        for name, binary in known:
+            self.browser_combo.addItem('%s  (%s)' % (name, binary), binary)
+        index = next((i for i in range(self.browser_combo.count()) if self.browser_combo.itemData(i) == current), -1)
+        if index < 0:
+            self.browser_combo.addItem(t('browser_current_other', c=current), current)
+            index = self.browser_combo.count() - 1
+        self.browser_combo.setCurrentIndex(index)
+        self.browser_combo.blockSignals(False)
+
+    def browser_picked(self, index):
+        self.set_browser_command(self.browser_combo.itemData(index))
+
+    def choose_other_program(self):
+        path, _ = QFileDialog.getOpenFileName(self, t('other_program'), '/usr/bin')
+        if path:
+            self.set_browser_command(path)
+
+    def set_browser_command(self, command):
+        """Store the browser used to open links; only something that can really be started is accepted."""
+        command = (command or '').strip()
+        found = shutil.which(command) if command else None
+        if not found:
+            self.browser_note.setText(t('browser_invalid', c=command))
+            self.browser_note.setVisible(True)
+            self.edit_browser.setText(tb.load_config()['browser'])
+            self.fill_browser_combo()
+            return
+        self.browser_note.setVisible(False)
+        self.save_cfg('browser', command)
+        self.edit_browser.setText(command)
+        self.fill_browser_combo()
 
     def save_quick(self):
         self.save_cfg('quick', [k for k, _, _, _ in OPTIONS if self.quick_checks[k].isChecked()])
