@@ -862,6 +862,9 @@ class SettingsWindow(QWidget):
 
     def open_extensions_page(self):
         browser = tb.load_config()['browser']
+        if 'firefox' in browser:
+            QProcess.startDetached(browser, ['about:debugging#/runtime/this-firefox'])
+            return
         scheme = 'vivaldi' if 'vivaldi' in browser else 'chrome'
         QProcess.startDetached(browser, [scheme + '://extensions'])
 
@@ -886,7 +889,7 @@ class SettingsWindow(QWidget):
         self.refresh_ext_status()
         chosen = tb.load_config().get('native_browsers')
         for i, (name, folder) in enumerate(tb.NATIVE_BROWSERS.items()):
-            found = os.path.isdir(os.path.expanduser('~/.config/' + folder))
+            found = os.path.isdir(tb.browser_dir(folder))
             registered = os.path.exists(tb.native_manifest_path(folder))
             first = self.native.item(i, 0)
             flags = Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled if found else Qt.ItemFlag.NoItemFlags

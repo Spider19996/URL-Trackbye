@@ -2,23 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>URL Trackbye</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body { font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 12px 14px; width: 270px; }
-    h1 { font-size: 15px; margin: 0 0 8px; }
-    label { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-    button { width: 100%; padding: 6px; margin-top: 8px; cursor: pointer; }
-    #msg, #status { font-size: 12px; opacity: .75; margin-top: 8px; }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h1>URL Trackbye</h1>
-  <label><input type="checkbox" id="enabled"> <span data-i18n="enabled">Clean links automatically</span></label>
-  <label><input type="checkbox" id="site"> <span><span data-i18n="site">Not on this site</span> <b id="host"></b></span></label>
-  <button id="copy" data-i18n="copy">Copy clean address of this tab</button>
-  <div id="msg"></div>
-  <div id="status"></div>
+  <header>
+    <img src="icons/icon128.png" alt="" class="logo" id="logo">
+    <div class="titles">
+      <h1>URL Trackbye</h1>
+      <p id="subtitle"></p>
+    </div>
+  </header>
+
+  <nav role="tablist">
+    <button class="tab active" data-tab="prefs" role="tab" id="tabPrefs"></button>
+    <button class="tab" data-tab="page" role="tab" id="tabPage"></button>
+    <button class="tab" data-tab="stats" role="tab" id="tabStats"></button>
+  </nav>
+
+  <main>
+    <section id="prefs" class="panel">
+      <div class="card" id="statusCard">
+        <div class="badge" id="statusBadge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+        </div>
+        <div class="grow">
+          <strong id="statusTitle"></strong>
+          <div class="muted" id="statusSub"></div>
+        </div>
+        <button class="btn" id="sync"></button>
+      </div>
+
+      <div id="perm" class="notice" hidden>
+        <div id="permText"></div>
+        <button class="btn primary" id="grant"></button>
+      </div>
+
+      <label class="row">
+        <span id="lblEnabled"></span>
+        <input type="checkbox" id="enabled" class="switch">
+      </label>
+      <label class="row">
+        <span><span id="lblSite"></span> <b id="host"></b></span>
+        <input type="checkbox" id="site" class="switch">
+      </label>
+    </section>
+
+    <section id="page" class="panel" hidden>
+      <div class="field">
+        <div class="muted" id="lblAddress"></div>
+        <div class="url" id="currentUrl"></div>
+      </div>
+      <div class="field">
+        <div class="muted" id="lblClean"></div>
+        <div class="url clean" id="cleanUrl"></div>
+      </div>
+      <button class="btn primary wide" id="copy"></button>
+      <div class="muted center" id="msg" aria-live="polite"></div>
+    </section>
+
+    <section id="stats" class="panel" hidden>
+      <div class="numbers">
+        <div class="number"><b id="nToday">–</b><span id="lblToday"></span></div>
+        <div class="number"><b id="nTotal">–</b><span id="lblTotal"></span></div>
+      </div>
+      <div class="muted" id="lblRecent"></div>
+      <ul id="recent" class="recent"></ul>
+      <div class="muted" id="noStats" hidden></div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="dot" id="dot"></span><span id="progState"></span>
+    <span class="grow"></span>
+    <span class="muted" id="version"></span>
+  </footer>
   <script src="popup.js" type="module"></script>
 </body>
 </html>

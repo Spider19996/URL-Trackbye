@@ -68,11 +68,26 @@ copies marked by a password manager are never touched.
 
 1. Open `vivaldi://extensions`, enable developer mode, **Load unpacked**, choose the `extension` folder.
    The extension has a fixed ID (`kcppbmmghccgpmjafccjammekemegidd`).
-2. Optional, so the extension uses the same rules as the program (including your own additions):
+2. Optional, so the extension uses the same rules as the program and its popup can show statistics (including your own additions):
    `./trackbye.py install-native` (registers the native messaging host for the browsers found in `~/.config`).
    Without it the extension uses its bundled copy of `rules.json`. The popup shows which one is active. With the program
    installed the extension also picks up changed rules every 30 minutes and **reloads itself** when the extension
    files on disk have a newer version (after a `git pull`, bump `version` in `extension/manifest.json` for releases).
+
+### Firefox
+
+The same extension folder works in Firefox 128+ (one code base for both browsers):
+
+1. Open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on** and choose `extension/manifest.json`.
+   Firefox removes temporary add-ons when it closes. For a permanent install the add-on has to be signed by Mozilla
+   (free: upload it as "unlisted" on addons.mozilla.org); unsigned add-ons only stay in Developer Edition / ESR /
+   Nightly with `xpinstall.signatures.required` set to `false`.
+2. If the popup shows "Allow access to all websites", click it (Firefox asks for this permission separately).
+3. For the shared rules, tick Firefox in the app's Browser page and press Apply (it writes
+   `~/.mozilla/native-messaging-hosts/de.trackbye.host.json`).
+
+Tested with Firefox 158: a link with tracking parameters is cleaned before it loads. Snap or Flatpak versions of Firefox
+look for the native messaging file in other places and are not supported yet.
 
 ### Links from other apps (Discord, ...)
 

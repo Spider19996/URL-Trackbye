@@ -366,26 +366,38 @@ def cmd_install_handler(args):
 
 
 NATIVE_BROWSERS = {'Vivaldi': 'vivaldi', 'Chromium': 'chromium', 'Google Chrome': 'google-chrome',
-                   'Brave': 'BraveSoftware/Brave-Browser'}
+                   'Brave': 'BraveSoftware/Brave-Browser', 'Firefox': 'firefox'}
+FIREFOX_ID = 'url-trackbye@spider19996'  # must match browser_specific_settings in extension/manifest.json
+
+
+def browser_dir(folder):
+    """Where a browser keeps its profile data (used to find out whether it is installed)."""
+    return os.path.expanduser('~/.mozilla/firefox' if folder == 'firefox' else '~/.config/' + folder)
 
 
 def native_manifest_path(folder):
+    if folder == 'firefox':
+        return os.path.expanduser('~/.mozilla/native-messaging-hosts/' + HOST_NAME + '.json')
     return os.path.join(os.path.expanduser('~/.config/' + folder), 'NativeMessagingHosts', HOST_NAME + '.json')
 
 
 def install_native(folders=None):
-    """Register the native messaging host for the given browser config folders (default: all that exist)."""
-    manifest = {
+    """Register the native messaging host for the given browsers (default: all that are installed)."""
+    base = {
         'name': HOST_NAME,
         'description': 'URL Trackbye: shares the cleaning rules with the browser extension',
         'path': SCRIPT,
         'type': 'stdio',
-        'allowed_origins': ['chrome-extension://' + EXTENSION_ID + '/'],
     }
     written = []
     for folder in folders or NATIVE_BROWSERS.values():
-        if not os.path.isdir(os.path.expanduser('~/.config/' + folder)):
+        if not os.path.isdir(browser_dir(folder)):
             continue
+        manifest = dict(base)
+        if folder == 'firefox':
+            manifest['allowed_extensions'] = [FIREFOX_ID]
+        else:
+            manifest['allowed_origins'] = ['chrome-extension://' + EXTENSION_ID + '/']
         target = native_manifest_path(folder)
         write_json(target, manifest)
         written.append(target)
@@ -536,6 +548,11 @@ def cmd_native():
         elif kind == 'diag':
             diag(str(msg.get('level', 'error')), str(msg.get('message', '')), 'browser extension')
             send({'ok': True})
+        elif kind == 'stats':
+            entries = read_log()
+            midnight = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+            send({'ok': True, 'total': len(entries), 'today': len([e for e in entries if e.get('t', 0) >= midnight]),
+                  'recent': [{'t': e.get('t'), 'to': e.get('to'), 'removed': e.get('removed', [])} for e in entries[-5:]][::-1]})
         elif kind == 'version':
             send({'ok': True, 'version': extension_version(), 'program': VERSION})
         elif kind == 'clean':
@@ -559,7 +576,7 @@ def main(argv):
     except (SystemExit, KeyboardInterrupt):
         raise
     except Exception as e:  # noqa: BLE001 - last resort: record it instead of failing silently
-        diag('error', '%s failed: %s: %s' % (cmd if not cmd.startswith('chrome-extension') else 'native host',
+        diag('error', '%s failed: %s: %s' % (cmd if not (cmd.startswith('chrome-extension') or cmd.endswith('.json')) else 'native host',
                                              type(e).__name__, e), ''.join(traceback.format_exception_only(type(e), e)).strip())
         if cmd == 'open':  # the link must still open, even if cleaning broke
             try:
@@ -574,7 +591,8 @@ def main(argv):
 
 def run(argv):
     # The browser starts a native host with the extension origin as its only argument.
-    if len(argv) > 1 and argv[1].startswith('chrome-extension://'):
+    # Chrome-like browsers pass the extension origin, Firefox passes the path of this host's manifest and the add-on id.
+    if len(argv) > 1 and (argv[1].startswith('chrome-extension://') or (argv[1].endswith('.json') and HOST_NAME in argv[1])):
         return cmd_native()
     cmd = argv[1] if len(argv) > 1 else 'tray'
     rest = argv[2:]
