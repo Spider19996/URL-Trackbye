@@ -45,7 +45,7 @@ class Signing(unittest.TestCase):
         pattern = re.compile(r'user:\d{4,}:\d+|AMO_JWT_' + r'SECRET=\S+')
         for name in files:
             path = os.path.join(ROOT, name)
-            if name.endswith(('.png', '.zip')) or not os.path.isfile(path) or name == 'tests/test_signing.py':
+            if name.endswith(('.png', '.zip')) or not os.path.isfile(path) or name in ('tests/test_signing.py', '.githooks/pre-commit'):  # these contain the patterns themselves
                 continue
             text = open(path, encoding='utf-8', errors='ignore').read()
             self.assertIsNone(pattern.search(text), 'looks like a credential in ' + name)
