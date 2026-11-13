@@ -65,8 +65,8 @@ TEXT = {
     'builtin': ('Built-in rules: {p} parameters and {s} sites', 'Eingebaute Regeln: {p} Parameter und {s} Seiten'),
     'try': ('Try it: paste a link', 'Ausprobieren: Link einfügen'),
     'ext_head': ('Browser extension', 'Browser-Erweiterung'),
-    'ext_help': ('Load it once: open vivaldi://extensions (or chrome://extensions), enable developer mode, "Load unpacked", choose this folder.',
-                 'Einmal laden: vivaldi://extensions (oder chrome://extensions) öffnen, Entwicklermodus einschalten, "Entpackte Erweiterung laden", diesen Ordner wählen.'),
+    'ext_help': ('<b>How to install the extension</b><ol style="margin-top:2px;margin-bottom:2px"><li>Select your browser in the table below and click "Install in …".</li><li><b>Firefox-like browsers</b> open the signed package: confirm "Add" there.<br><b>Chrome-like browsers</b> (Vivaldi, Chrome, Edge, …) open their extensions page: switch on "Developer mode", click "Load unpacked" and paste the folder shown above.</li><li><b>Afterwards, and after every update of the extension, press "Apply" below.</b> It sets up the link between the browser and this program.</li></ol>',
+    '<b>So installierst du die Erweiterung</b><ol style="margin-top:2px;margin-bottom:2px"><li>Unten in der Tabelle deinen Browser auswählen und auf „In … installieren …“ klicken.</li><li><b>Firefox-artige Browser</b> öffnen das signierte Paket: dort „Hinzufügen“ bestätigen.<br><b>Chrome-artige Browser</b> (Vivaldi, Chrome, Edge, …) öffnen ihre Erweiterungsseite: „Entwicklermodus“ einschalten, „Entpackte Erweiterung laden“ klicken und den oben gezeigten Ordner einfügen.</li><li><b>Danach, und nach jedem Update der Erweiterung, unten auf „Übernehmen“ drücken.</b> Das richtet die Verbindung zwischen Browser und diesem Programm ein.</li></ol>'),
     'open_folder': ('Open folder', 'Ordner öffnen'),
     'native_head': ('Share the rules with the extension (native messaging)', 'Regeln mit der Erweiterung teilen (Native Messaging)'),
     'col_browser': ('Browser', 'Browser'),
@@ -83,16 +83,16 @@ TEXT = {
     'copy_path': ('Copy', 'Kopieren'),
     'copied': ('Copied ✓', 'Kopiert ✓'),
     'no_binary': ('the program could not be found.', 'das Programm wurde nicht gefunden.'),
-    'xpi_opened': ('the signed extension was opened; confirm "Add" in the window that appears in Firefox.',
-                   'die signierte Erweiterung wurde geöffnet; bestätige in Firefox im erscheinenden Fenster "Hinzufügen".'),
+    'xpi_opened': ('the signed extension was opened. Confirm "Add" in the Firefox window. Then press "Apply".',
+    'die signierte Erweiterung wurde geöffnet. Bestätige in Firefox „Hinzufügen“. Danach „Übernehmen“ drücken.'),
     'no_xpi': ('there is no signed package yet (tools/sign_firefox.py creates it). The debugging page was opened instead: "Load Temporary Add-on", then choose manifest.json in {d} (it stays until Firefox closes).',
                'es gibt noch kein signiertes Paket (tools/sign_firefox.py erstellt es). Stattdessen wurde die Debugging-Seite geöffnet: "Temporäres Add-on laden" und die manifest.json in {d} wählen (gilt bis Firefox geschlossen wird).'),
     'tip_apply': ('Sets up (ticked) or removes (unticked) the link between the browser and this program. With the link the extension uses your rules, fills the log and statistics, and can open these settings. It does NOT install the extension.',
                   'Richtet die Verbindung zwischen Browser und diesem Programm ein (Haken) oder löscht sie (kein Haken). Mit der Verbindung nutzt die Erweiterung deine Regeln, füllt Protokoll und Statistik und kann diese Einstellungen öffnen. Sie installiert die Erweiterung NICHT.'),
     'tip_install': ('Starts the installation of the extension in the browser selected in the table: Firefox-like browsers open the signed package (you confirm "Add"), Chrome-like ones open their extensions page (you load the folder shown above there once). Only that one browser is opened.',
     'Startet die Installation der Erweiterung in dem Browser, der in der Tabelle ausgewählt ist: Firefox-artige öffnen das signierte Paket (du bestätigst "Hinzufügen"), Chrome-artige öffnen ihre Erweiterungsseite (dort lädst du den oben gezeigten Ordner einmal). Es wird nur dieser eine Browser geöffnet.'),
-    'chromium_steps': ('the extensions page was opened. Switch on "Developer mode", click "Load unpacked" and paste this folder. Browsers like Chrome only accept extensions from outside their store this way.',
-    'die Erweiterungsseite wurde geöffnet. "Entwicklermodus" einschalten, "Entpackte Erweiterung laden" klicken und diesen Ordner einfügen. Chrome-artige Browser nehmen Erweiterungen von außerhalb ihres Stores nur so an.'),
+    'chromium_steps': ('the extensions page was opened. Load the folder there (see the steps above), then press "Apply".',
+    'die Erweiterungsseite wurde geöffnet. Lade dort den Ordner (Schritte oben), danach „Übernehmen“ drücken.'),
     'add_browser': ('Add browser…', 'Browser hinzufügen …'),
     'remove_browser': ('Remove selected', 'Auswahl entfernen'),
     'custom_tag': ('(added)', '(hinzugefügt)'),
@@ -105,7 +105,8 @@ TEXT = {
     'folder_found': ('Found the browser folder: {d}', 'Browser-Ordner gefunden: {d}'),
     'folder_default': ('No folder of this name found, the usual one is used: {d}', 'Kein Ordner mit diesem Namen gefunden, es wird der übliche verwendet: {d}'),
     'change_folder': ('Choose another folder…', 'Anderen Ordner wählen …'),
-    'native_hint': ('Tick the browsers whose extension should get the rules from this program. Unticking removes the link again.', 'Hake die Browser an, deren Erweiterung die Regeln von diesem Programm bekommen soll. Entfernst du den Haken, wird die Verbindung wieder gelöscht.'),
+    'native_hint': ('Tick the browsers whose extension should get the rules from this program, then press "Apply" (also after installing or updating the extension). Unticking removes the link again.',
+    'Hake die Browser an, deren Erweiterung die Regeln von diesem Programm bekommen soll, und drücke dann „Übernehmen“ (auch nach dem Installieren oder Aktualisieren der Erweiterung). Entfernst du den Haken, wird die Verbindung wieder gelöscht.'),
     'yes': ('yes', 'ja'),
     'no': ('no', 'nein'),
     'opener_head': ('Links from other apps (Discord, mail, …)', 'Links aus anderen Programmen (Discord, Mail, …)'),
@@ -301,33 +302,6 @@ class ClipboardService:
 # --------------------------------------------------------------------------------------------------------------
 # Settings window
 # --------------------------------------------------------------------------------------------------------------
-
-class InfoDialog(QDialog):
-    """A message that is always shown in full (QMessageBox cuts long texts off)."""
-
-    def __init__(self, parent, text, copy_text=None):
-        super().__init__(parent)
-        self.setWindowTitle(t('title'))
-        self.setMinimumWidth(560)
-        box = QVBoxLayout(self)
-        label = QLabel(text)
-        label.setWordWrap(True)
-        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        box.addWidget(label)
-        if copy_text:
-            field = QLineEdit(copy_text)
-            field.setReadOnly(True)
-            copy_btn = QPushButton(QIcon.fromTheme('edit-copy'), t('copy_path'))
-            copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(copy_text))
-            line = QHBoxLayout()
-            line.addWidget(field, 1)
-            line.addWidget(copy_btn)
-            box.addLayout(line)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        buttons.accepted.connect(self.accept)
-        box.addWidget(buttons)
-        self.adjustSize()
-
 
 class AddBrowserDialog(QDialog):
     """Add a browser the app does not know. Only name and family are asked; the folder is found automatically."""
@@ -891,8 +865,8 @@ class SettingsWindow(QWidget):
             line.addWidget(copy_btn)
             l_ext.addLayout(line)
         help_label = QLabel(t('ext_help'))
+        help_label.setTextFormat(Qt.TextFormat.RichText)
         help_label.setWordWrap(True)
-        help_label.setStyleSheet('color: gray')
         l_ext.addWidget(help_label)
         row_ext = QHBoxLayout()
         page_btn = QPushButton(QIcon.fromTheme('internet-web-browser'), t('ext_page'))
@@ -949,6 +923,10 @@ class SettingsWindow(QWidget):
             row_nat.addWidget(b)
         row_nat.addStretch(1)
         l_nat.addLayout(row_nat)
+        self.install_note = QLabel('')
+        self.install_note.setWordWrap(True)
+        self.install_note.setVisible(False)  # appears after a click on install
+        l_nat.addWidget(self.install_note)
         row_more = QHBoxLayout()
         add_browser = QPushButton(QIcon.fromTheme('list-add'), t('add_browser'))
         add_browser.clicked.connect(self.add_browser)
@@ -1005,35 +983,33 @@ class SettingsWindow(QWidget):
         self.install_btn.setText(t('install_one', name=entry['name']) if entry else t('install_none'))
 
     def install_extension(self):
-        """Start the installation of the extension in the ONE browser selected in the table: Firefox-like browsers
-        open the signed package (one click to confirm), Chrome-like ones open their extensions page (they only accept
-        unpacked ones in developer mode, there is no way around that without the store). The folder is not opened;
-        its path is shown on this page with a copy button."""
+        """Start the installation of the extension in the ONE browser selected in the table. No popup: the result
+        is a line of text under the buttons, the general steps are written above the table."""
         entry = self.selected_browser()
         if entry is None:
-            InfoDialog(self, t('select_first')).exec()
+            self.show_install_note(t('select_first'), error=True)
             return
         binary = tb.browser_binary(entry)
-        copy_text = None
         if not binary:
-            note = entry['name'] + ': ' + t('no_binary')
+            self.show_install_note(entry['name'] + ': ' + t('no_binary'), error=True)
         elif entry['kind'] == 'firefox':
             xpi = tb.latest_xpi()
             if xpi:
                 QProcess.startDetached(binary, [xpi])
-                note = entry['name'] + ': ' + t('xpi_opened')
+                self.show_install_note(entry['name'] + ': ' + t('xpi_opened'))
             else:
                 folder = tb.build_firefox_folder()
                 QProcess.startDetached(binary, ['about:debugging#/runtime/this-firefox'])
-                note = entry['name'] + ': ' + t('no_xpi', d=folder)
-                copy_text = folder
+                self.show_install_note(entry['name'] + ': ' + t('no_xpi', d=folder))
         else:
             scheme = 'vivaldi' if 'vivaldi' in binary else 'edge' if 'edge' in binary else 'opera' if binary == 'opera' else 'chrome'
             QProcess.startDetached(binary, [scheme + '://extensions'])
-            folder = os.path.join(tb.HERE, 'extension')
-            note = entry['name'] + ': ' + t('chromium_steps')
-            copy_text = folder
-        InfoDialog(self, note, copy_text).exec()
+            self.show_install_note(entry['name'] + ': ' + t('chromium_steps'))
+
+    def show_install_note(self, text, error=False):
+        self.install_note.setText(text)
+        self.install_note.setVisible(True)
+        self.install_note.setStyleSheet('color: #c0392b' if error else 'color: #1e8449')
 
     def open_extensions_page(self):
         browser = tb.load_config()['browser']
