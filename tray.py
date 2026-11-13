@@ -784,9 +784,12 @@ class SettingsWindow(QWidget):
         self.ext_current = QLabel('')
         self.ext_state = QLabel('')
         self.ext_state.setWordWrap(True)
+        self.ext_state.setMinimumHeight(44)  # a wrapped label in a form row is otherwise cut off
+        self.ext_state.setAlignment(Qt.AlignmentFlag.AlignTop)
         form.addRow(t('ext_installed'), self.ext_installed)
         form.addRow(t('ext_current'), self.ext_current)
         form.addRow(t('ext_state'), self.ext_state)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         l_ext.addLayout(form)
         note = QLabel(t('ext_note'))
         note.setWordWrap(True)
