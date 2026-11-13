@@ -10,7 +10,8 @@
 One small program with several jobs that all use the same rules (rules.json):
 
   trackbye clean URL...      print the cleaned URLs
-  trackbye                   start the app (tray symbol, clipboard cleaning, log, settings). Needs PyQt6.
+  trackbye                   start the app (tray symbol, clipboard cleaning, log, settings) and open its window. Needs PyQt6.
+  trackbye --background      the same without opening the window (used by the autostart entry)
   trackbye watch             watch the clipboard (Wayland, needs wl-clipboard) and clean copied URLs
   trackbye open [URL...]     clean the URLs and open them in the real browser (use as default browser)
   trackbye install-handler   write the desktop entry that makes `open` selectable as default browser
@@ -413,7 +414,7 @@ def set_autostart(on):
     if on:
         os.makedirs(os.path.dirname(AUTOSTART), exist_ok=True)
         with open(AUTOSTART, 'w', encoding='utf-8') as f:
-            f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nComment=Start URL Trackbye with the desktop\nExec=' + SCRIPT + '\nTerminal=false\n'
+            f.write('[Desktop Entry]\nType=Application\nName=URL Trackbye\nComment=Start URL Trackbye with the desktop\nExec=' + SCRIPT + ' --background\nTerminal=false\n'
                     'Icon=' + os.path.join(HERE, 'assets', 'trackbye.png') + '\nX-KDE-autostart-after=panel\n')
     elif os.path.exists(AUTOSTART):
         os.remove(AUTOSTART)
@@ -458,12 +459,12 @@ def extension_version():
     return read_json(os.path.join(HERE, 'extension', 'manifest.json'), {}).get('version', '')
 
 
-def cmd_tray():
+def cmd_tray(background=False):
     try:
         import tray
     except ImportError as e:
         sys.exit('The tray app needs PyQt6 (Debian/Ubuntu/PikaOS: sudo apt install python3-pyqt6). ' + str(e))
-    sys.exit(tray.run())
+    sys.exit(tray.run(background))
 
 
 # Native messaging: each message is a 4-byte length (native byte order) followed by UTF-8 JSON.
@@ -579,8 +580,9 @@ def run(argv):
     rest = argv[2:]
     if cmd == 'clean':
         cmd_clean(rest)
-    elif cmd == 'tray':
-        cmd_tray()
+    elif cmd in ('tray', '--background'):
+        # started with an argument (autostart): stay in the background; plain start (menu entry): open the window
+        cmd_tray(background=len(argv) > 1)
     elif cmd == 'watch':
         cmd_watch()
     elif cmd == 'filter-clip':

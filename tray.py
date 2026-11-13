@@ -952,7 +952,7 @@ class SettingsWindow(QWidget):
 # --------------------------------------------------------------------------------------------------------------
 
 class TrayApp:
-    def __init__(self, qapp):
+    def __init__(self, qapp, show_window=False):
         self.qapp = qapp
         self.service = ClipboardService()
         self.window = None
@@ -976,6 +976,8 @@ class TrayApp:
         on = tb.load_config()['clipboard']
         self.apply(on)
         tb.install_launcher()  # application menu entry "URL Trackbye"
+        if os.path.exists(tb.AUTOSTART):
+            tb.set_autostart(True)  # refresh: the autostart entry starts in the background
         if os.path.exists(tb.desktop_file()):
             tb.install_handler()  # refresh the link opener entry (names), without changing the default browser
         tb.diag('info', 'URL Trackbye %s started' % tb.VERSION)
@@ -987,8 +989,8 @@ class TrayApp:
         self.notice_timer.start(3000)
         show_tray = tb.load_config()['tray_icon'] and QSystemTrayIcon.isSystemTrayAvailable()
         self.tray.setVisible(show_tray)
-        if not show_tray or not os.path.exists(os.path.join(tb.CONFIG_DIR, 'config.json')):
-            self.show_settings()  # no tray symbol to click, or first start: open the settings
+        if show_window or not show_tray or not os.path.exists(os.path.join(tb.CONFIG_DIR, 'config.json')):
+            self.show_settings()  # started by hand, no tray symbol to click, or first start: open the settings
 
     def apply(self, on):
         self.service.sync(on)
@@ -1099,7 +1101,7 @@ class TrayApp:
         self.qapp.quit()
 
 
-def run():
+def run(background=False):
     qapp = QApplication(sys.argv[:1])
     qapp.setApplicationName('trackbye')
     qapp.setWindowIcon(QIcon(ICON))
@@ -1108,15 +1110,16 @@ def run():
     sock = QLocalSocket()
     sock.connectToServer(SERVER_NAME)
     if sock.waitForConnected(300):
-        sock.write(b'show')
-        sock.flush()
-        sock.waitForBytesWritten(300)
-        print('URL Trackbye is already running; its settings window was opened.')
+        if not background:
+            sock.write(b'show')
+            sock.flush()
+            sock.waitForBytesWritten(300)
+        print('URL Trackbye is already running.')
         return 0
     QLocalServer.removeServer(SERVER_NAME)
     server = QLocalServer()
     server.listen(SERVER_NAME)
-    app = TrayApp(qapp)
+    app = TrayApp(qapp, show_window=not background)
 
     def on_connection():
         conn = server.nextPendingConnection()
