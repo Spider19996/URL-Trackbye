@@ -75,6 +75,9 @@ TEXT = {
     'register': ('Apply', 'Übernehmen'),
     'col_ext': ('Extension', 'Erweiterung'),
     'ext_no_contact': ('No contact yet: the extension is not loaded in this browser, or the link to the program is not set up.', 'Noch kein Kontakt: Die Erweiterung ist in diesem Browser nicht geladen oder die Verbindung zum Programm ist nicht eingerichtet.'),
+    'page_one': ('Open the extensions page of {name}', 'Erweiterungsseite von {name} öffnen'),
+    'page_none': ('Open extensions page (select a browser first)', 'Erweiterungsseite öffnen (erst einen Browser auswählen)'),
+    'page_opened': ('the extensions page was opened.', 'die Erweiterungsseite wurde geöffnet.'),
     'install_one': ('Install in {name}…', 'In {name} installieren …'),
     'install_none': ('Install… (select a browser first)', 'Installieren … (erst einen Browser auswählen)'),
     'select_first': ('Select a browser in the table first (click its row).', 'Wähle zuerst einen Browser in der Tabelle aus (Zeile anklicken).'),
@@ -152,7 +155,6 @@ TEXT = {
     'events_copy': ('Copy all', 'Alle kopieren'),
     'problem': ('URL Trackbye: problem', 'URL Trackbye: Problem'),
     'ext_installed': ('Version in the browser:', 'Version im Browser:'),
-    'ext_current': ('Current version:', 'Aktuelle Version:'),
     'ext_state': ('Status:', 'Status:'),
     'ext_ok': ('up to date', 'aktuell'),
     'ext_none': ('unknown', 'unbekannt'),
@@ -164,7 +166,6 @@ TEXT = {
     'ext_note': ('The version only changes when the extension itself changed; program updates that do not touch it never ask you to reload it.',
                  'Die Version ändert sich nur, wenn die Erweiterung selbst geändert wurde; Programm-Updates ohne Änderung daran verlangen kein Neuladen.'),
     'ext_older': ('an older version', 'eine ältere Version'),
-    'ext_page': ('Open the extensions page', 'Erweiterungsseite öffnen'),
     'ext_notice_title': ('URL Trackbye: update the extension', 'URL Trackbye: Erweiterung aktualisieren'),
     'tray_icon_short': ('Show the tray symbol', 'Tray-Symbol anzeigen'),
     'tray_hint': ('If hidden: start URL Trackbye again or use the application menu entry "URL Trackbye" to open this window.',
@@ -868,18 +869,6 @@ class SettingsWindow(QWidget):
         help_label.setTextFormat(Qt.TextFormat.RichText)
         help_label.setWordWrap(True)
         l_ext.addWidget(help_label)
-        row_ext = QHBoxLayout()
-        page_btn = QPushButton(QIcon.fromTheme('internet-web-browser'), t('ext_page'))
-        page_btn.clicked.connect(self.open_extensions_page)
-        row_ext.addWidget(page_btn)
-        row_ext.addStretch(1)
-        l_ext.addLayout(row_ext)
-        current_row = QHBoxLayout()
-        current_row.addWidget(QLabel(t('ext_current')))
-        self.ext_current = QLabel('')
-        current_row.addWidget(self.ext_current)
-        current_row.addStretch(1)
-        l_ext.addLayout(current_row)
         note = QLabel(t('ext_note'))
         note.setWordWrap(True)
         note.setStyleSheet('color: gray')
@@ -919,7 +908,9 @@ class SettingsWindow(QWidget):
         install_btn.clicked.connect(self.install_extension)
         install_btn.setToolTip(t('tip_install'))
         self.install_btn = install_btn
-        for b in (reg, install_btn):
+        self.page_btn = QPushButton(QIcon.fromTheme('internet-web-browser'), t('page_none'))
+        self.page_btn.clicked.connect(self.open_extensions_page)
+        for b in (reg, install_btn, self.page_btn):
             row_nat.addWidget(b)
         row_nat.addStretch(1)
         l_nat.addLayout(row_nat)
@@ -981,6 +972,8 @@ class SettingsWindow(QWidget):
         entry = self.selected_browser()
         self.install_btn.setEnabled(entry is not None)
         self.install_btn.setText(t('install_one', name=entry['name']) if entry else t('install_none'))
+        self.page_btn.setEnabled(entry is not None)
+        self.page_btn.setText(t('page_one', name=entry['name']) if entry else t('page_none'))
 
     def install_extension(self):
         """Start the installation of the extension in the ONE browser selected in the table. No popup: the result
@@ -1002,8 +995,7 @@ class SettingsWindow(QWidget):
                 QProcess.startDetached(binary, ['about:debugging#/runtime/this-firefox'])
                 self.show_install_note(entry['name'] + ': ' + t('no_xpi', d=folder))
         else:
-            scheme = 'vivaldi' if 'vivaldi' in binary else 'edge' if 'edge' in binary else 'opera' if binary == 'opera' else 'chrome'
-            QProcess.startDetached(binary, [scheme + '://extensions'])
+            QProcess.startDetached(binary, [self.extensions_page(entry, binary)])
             self.show_install_note(entry['name'] + ': ' + t('chromium_steps'))
 
     def show_install_note(self, text, error=False):
@@ -1011,16 +1003,26 @@ class SettingsWindow(QWidget):
         self.install_note.setVisible(True)
         self.install_note.setStyleSheet('color: #c0392b' if error else 'color: #1e8449')
 
-    def open_extensions_page(self):
-        browser = tb.load_config()['browser']
-        if 'firefox' in browser:
-            QProcess.startDetached(browser, ['about:debugging#/runtime/this-firefox'])
-            return
-        scheme = 'vivaldi' if 'vivaldi' in browser else 'chrome'
-        QProcess.startDetached(browser, [scheme + '://extensions'])
+    @staticmethod
+    def extensions_page(entry, binary):
+        """The page of this browser where extensions are managed."""
+        if entry['kind'] == 'firefox':
+            return 'about:debugging#/runtime/this-firefox'
+        scheme = 'vivaldi' if 'vivaldi' in binary else 'edge' if 'edge' in binary else 'opera' if binary == 'opera' else 'chrome'
+        return scheme + '://extensions'
 
-    def refresh_ext_status(self):
-        self.ext_current.setText(tb.extension_version() or t('ext_none'))
+    def open_extensions_page(self):
+        """Open the extensions page of the ONE browser selected in the table."""
+        entry = self.selected_browser()
+        if entry is None:
+            self.show_install_note(t('select_first'), error=True)
+            return
+        binary = tb.browser_binary(entry)
+        if not binary:
+            self.show_install_note(entry['name'] + ': ' + t('no_binary'), error=True)
+            return
+        QProcess.startDetached(binary, [self.extensions_page(entry, binary)])
+        self.show_install_note(entry['name'] + ': ' + t('page_opened'))
 
     def fill_native_table(self):
         """One row per known browser (built-in and added ones) with a checkbox, found? and set up?"""
@@ -1061,7 +1063,6 @@ class SettingsWindow(QWidget):
             self.native.setItem(i, 3, version_item)
 
     def refresh_browser_tab(self):
-        self.refresh_ext_status()
         self.fill_native_table()
         self.update_install_button()
         self.opener_status.setText(t('opener_status', d=tb.default_browser() or '?'))
