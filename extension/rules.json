@@ -257,6 +257,17 @@
       ]
     },
     {
+      "name": "Steam",
+      "hosts": [
+        "steampowered.com",
+        "steamcommunity.com"
+      ],
+      "remove": [
+        "curator_clanid",
+        "snr"
+      ]
+    },
+    {
       "name": "80000hours.org",
       "hosts": [
         "80000hours.org"

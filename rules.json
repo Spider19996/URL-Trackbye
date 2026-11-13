@@ -221,6 +221,17 @@
         "midToken",
         "midSig"
       ]
+    },
+    {
+      "name": "Steam",
+      "hosts": [
+        "steampowered.com",
+        "steamcommunity.com"
+      ],
+      "remove": [
+        "curator_clanid",
+        "snr"
+      ]
     }
   ]
 }

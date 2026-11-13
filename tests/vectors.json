@@ -66,5 +66,13 @@
  [
   "https://user:pw@example.com:8080/p?utm_source=x&a=1",
   "https://user:pw@example.com:8080/p?a=1"
+ ],
+ [
+  "https://store.steampowered.com/app/5118500/SafariTV/?curator_clanid=41316928",
+  "https://store.steampowered.com/app/5118500/SafariTV/"
+ ],
+ [
+  "https://store.steampowered.com/search/?term=zelda&snr=1_4_4__12&curator_clanid=7",
+  "https://store.steampowered.com/search/?term=zelda"
  ]
 ]
