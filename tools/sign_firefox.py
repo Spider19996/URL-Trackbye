@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import package_extension  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-API = 'https://addons.mozilla.org/api/v5/addons/'
+API = 'https://addons.mozilla.org/api/v4/addons/'  # the signing endpoint lives in the (frozen) v4 API
 CREDENTIALS_FILE = os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'trackbye', 'amo-credentials.json')
 
 
@@ -124,7 +124,7 @@ def main():
         print('Dry run: package is ready (%s), nothing was sent.' % os.path.relpath(zip_path, ROOT))
         return 0
     content = open(zip_path, 'rb').read()
-    url = API + '%s/versions/%s/' % (urllib.request.quote(guid), version)
+    url = API + '%s/versions/%s/' % (urllib.request.quote(guid, safe='@'), version)
     body, ctype = multipart({'channel': 'unlisted'}, os.path.basename(zip_path), content)
     print('Uploading to Mozilla (unlisted, nothing is published) ...')
     status, answer = request('PUT', url, issuer, secret, body, ctype)
