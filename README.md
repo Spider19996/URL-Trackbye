@@ -38,6 +38,18 @@ symbol you can also use the application menu entry "URL Trackbye" (created when 
 ## Install
 
 ```bash
+git clone https://github.com/Spider19996/URL-Trackbye.git
+cd URL-Trackbye
+./install.sh              # checks PyQt6 / wl-clipboard, creates the menu entry, asks about autostart and browser link
+./install.sh --uninstall  # removes everything again (add --purge to delete settings and log, too)
+```
+
+`install.sh` needs no root: everything lives in your home folder and the program stays in the cloned folder. Options:
+`--autostart`, `--native` (link the browser extension), `--link` (command `trackbye` in `~/.local/bin`), `--yes`
+(no questions). The manual steps below do the same piece by piece.
+
+
+```bash
 git clone <this repo> ~/GitHub/url-trackbye && cd ~/GitHub/url-trackbye
 ./trackbye.py clean 'https://www.youtube.com/watch?v=abc&si=xyz'   # try it
 ```

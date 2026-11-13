@@ -16,6 +16,8 @@ One small program with several jobs that all use the same rules (rules.json):
   trackbye open [URL...]     clean the URLs and open them in the real browser (use as default browser)
   trackbye install-handler   write the desktop entry that makes `open` selectable as default browser
   trackbye install-native    register the native messaging host for the browser extension
+  trackbye install [--autostart] [--native] [--link]   set up for this user (menu entry, optional autostart, browser link, command)
+  trackbye uninstall [--purge]   remove what install created (--purge: also settings and log)
   trackbye reload-extension  ask the browser extension to reload itself (after changing its files)
   trackbye native            native messaging host (started by the browser extension, not by you)
 
@@ -589,6 +591,54 @@ def extension_version():
     return read_json(os.path.join(HERE, 'extension', 'manifest.json'), {}).get('version', '')
 
 
+BIN_LINK = os.path.expanduser('~/.local/bin/trackbye')
+
+
+def cmd_install(args):
+    """Set URL Trackbye up for this user (everything lives in the home folder, no root needed)."""
+    install_launcher()
+    print('Menu entry "URL Trackbye": ' + LAUNCHER)
+    if '--autostart' in args:
+        set_autostart(True)
+        print('Starts with the desktop session: ' + AUTOSTART)
+    if '--native' in args:
+        written = install_native()
+        print('Link to the browser extension in %d browser(s):' % len(written))
+        for target in written:
+            print('  ' + target)
+    if '--link' in args:
+        os.makedirs(os.path.dirname(BIN_LINK), exist_ok=True)
+        if os.path.islink(BIN_LINK) or os.path.exists(BIN_LINK):
+            os.remove(BIN_LINK)
+        os.symlink(SCRIPT, BIN_LINK)
+        print('Command "trackbye": ' + BIN_LINK + ' (make sure ~/.local/bin is in your PATH)')
+
+
+def cmd_uninstall(args):
+    """Remove everything `install` and the app's settings window created; --purge also deletes settings and log."""
+    cfg = load_config()
+    if default_browser() == 'trackbye.desktop' and cfg.get('previous_default'):
+        set_default_browser(cfg['previous_default'])
+        print('Default browser restored to ' + cfg['previous_default'])
+    for path in (LAUNCHER, desktop_file(), AUTOSTART):
+        if os.path.exists(path):
+            os.remove(path)
+            print('Removed ' + path)
+    for entry in browser_entries():
+        target = native_manifest_path(entry)
+        if os.path.exists(target):
+            os.remove(target)
+            print('Removed ' + target)
+    if os.path.islink(BIN_LINK) and os.path.realpath(BIN_LINK) == SCRIPT:
+        os.remove(BIN_LINK)
+        print('Removed ' + BIN_LINK)
+    if '--purge' in args:
+        for folder in (CONFIG_DIR, STATE_DIR):
+            shutil.rmtree(folder, ignore_errors=True)
+            print('Removed ' + folder)
+    print('Done. The extension itself is removed in the browser (its extensions page).')
+
+
 def cmd_tray(background=False):
     try:
         import tray
@@ -754,6 +804,10 @@ def run(argv):
         cmd_install_native()
     elif cmd == 'native':
         cmd_native()
+    elif cmd == 'install':
+        cmd_install(rest)
+    elif cmd == 'uninstall':
+        cmd_uninstall(rest)
     elif cmd == 'reload-extension':
         cmd_reload_extension()
     else:
