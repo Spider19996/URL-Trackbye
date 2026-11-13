@@ -14,6 +14,30 @@ excluded, and the extension can be switched off per site. No network access, no 
 
 Written from scratch for KDE Plasma on Wayland with Vivaldi/Chrome. Free software under the GNU GPL v3 or later.
 
+## Screenshots
+
+The settings window of the app (clean links, your rules, browser setup, log):
+
+<p>
+  <img src="docs/screenshots/app-general.png" alt="General settings" width="49%">
+  <img src="docs/screenshots/app-rules.png" alt="Rule list and own rules" width="49%">
+</p>
+<p>
+  <img src="docs/screenshots/app-browser.png" alt="Browser setup with connection and extension version per browser" width="49%">
+  <img src="docs/screenshots/app-log.png" alt="Log of cleaned links" width="49%">
+</p>
+
+The browser extension (dark and light, with the connection to the app):
+
+<p>
+  <img src="docs/screenshots/popup-prefs-dark.png" alt="Extension popup, preferences" width="24%">
+  <img src="docs/screenshots/popup-page-dark.png" alt="Extension popup, this page" width="24%">
+  <img src="docs/screenshots/popup-stats-dark.png" alt="Extension popup, statistics" width="24%">
+  <img src="docs/screenshots/popup-prefs-light.png" alt="Extension popup, light theme" width="24%">
+</p>
+
+(The links in the screenshots are made-up examples.)
+
 ## The app
 
 `./trackbye.py` (no arguments) starts URL Trackbye as a tray app (needs `python3-pyqt6`, `wl-clipboard`). It cleans the
