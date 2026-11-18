@@ -59,8 +59,11 @@ class CleanUrl(unittest.TestCase):
     def test_encoding_preserved(self):
         self.assertEqual(clean('https://a.com/?q=a%20b%2Bc&utm_id=1'), 'https://a.com/?q=a%20b%2Bc')
 
-    def test_amazon_keeps_variant_selection(self):
-        self.assertEqual(clean('https://www.amazon.de/dp/B0?th=1&psc=1&tag=x&ref_=ab'), 'https://www.amazon.de/dp/B0?th=1&psc=1')
+    def test_amazon_product_page_is_shortened(self):
+        self.assertEqual(clean('https://www.amazon.de/dp/B0?th=1&psc=1&tag=x&ref_=ab'), 'https://www.amazon.de/dp/B0')
+        self.assertEqual(clean('https://www.amazon.de/Some-Title/dp/B0ABC/ref=sr_1_6?dib=x&th=1'), 'https://www.amazon.de/dp/B0ABC/')
+        self.assertEqual(clean('https://www.amazon.de/dp/B0ABC/ref=sr_1_6'), 'https://www.amazon.de/dp/B0ABC/')
+        self.assertEqual(clean('https://www.amazon.de/dp/B0ABC/'), 'https://www.amazon.de/dp/B0ABC/')
 
 
 class SharedVectors(unittest.TestCase):

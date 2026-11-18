@@ -27,3 +27,31 @@ for (const site of rules.sites) {
 }
 assert.ok(built.length < 600, 'too many rules for the browser: ' + built.length);
 console.log('extension rules: ' + built.length + ' rules (max ' + CHUNK + ' names each) OK');
+
+// The path rules (product page shortening) as the browser applies them: first matching rule rewrites the URL, and the
+// result must not match any rule again (otherwise the browser would redirect forever).
+{
+  const { buildRules } = await import('../extension/dnr.js');
+  const all = buildRules(rules, []).filter((r) => r.action.redirect.regexSubstitution);
+  const apply = (url) => {
+    for (const r of all) {
+      const re = new RegExp(r.condition.regexFilter);
+      if (re.test(url)) return url.replace(re, r.action.redirect.regexSubstitution.replace(/\\(\d)/g, '$$$1'));
+    }
+    return url;
+  };
+  const cases = [
+    ['https://www.amazon.de/Some-Title/dp/B0ABC/ref=sr_1_6', 'https://www.amazon.de/dp/B0ABC/'],
+    ['https://www.amazon.de/Some-Title/dp/B0ABC/ref=sr_1_6?x=1#f', 'https://www.amazon.de/dp/B0ABC/?x=1#f'],
+    ['https://www.amazon.de/dp/B0ABC/ref=sr_1_6', 'https://www.amazon.de/dp/B0ABC/'],
+    ['https://www.amazon.de/dp/B0ABC/', 'https://www.amazon.de/dp/B0ABC/'],
+    ['https://www.amazon.de/dp/B0ABC', 'https://www.amazon.de/dp/B0ABC'],
+    ['https://www.amazon.de/s?k=x', 'https://www.amazon.de/s?k=x'],
+  ];
+  for (const [given, want] of cases) {
+    const got = apply(given);
+    assert.strictEqual(got, want, given);
+    assert.strictEqual(apply(got), got, 'must not rewrite again: ' + got);
+  }
+  console.log('extension path rules: ' + cases.length + ' cases OK');
+}

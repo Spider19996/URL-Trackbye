@@ -148,7 +148,15 @@
         "content-id",
         "dib",
         "dib_tag",
-        "keywords"
+        "keywords",
+        "th",
+        "psc"
+      ],
+      "path_remove": [
+        "ref="
+      ],
+      "path_product": [
+        "dp"
       ]
     },
     {

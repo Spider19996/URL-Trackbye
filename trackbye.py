@@ -57,7 +57,7 @@ RELOAD_TRIGGER = os.path.join(STATE_DIR, 'reload-extension')
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
                   'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify'], 'native_browsers': None, 'custom_browsers': [], 'rules_auto': True, 'rules_url': ''}
 SCRIPT = os.path.realpath(__file__)
-VERSION = '0.7.1'
+VERSION = '0.8.0'
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -88,6 +88,7 @@ RULES_MAX_BYTES = 1_500_000
 RULES_CHECK_EVERY = 24 * 3600
 _NAME = re.compile(r'^[A-Za-z0-9_.\-]{1,64}$')
 _HOST = re.compile(r'^[a-z0-9][a-z0-9.\-]{0,252}$')
+_PATH = re.compile(r'^[A-Za-z0-9_\-]{1,32}=$')  # start of a trailing path segment, e.g. 'ref=' (Amazon's /ref=sr_1_6)
 
 
 def validate_rules(doc):
@@ -115,6 +116,8 @@ def validate_rules(doc):
             raise ValueError('sites: bad entry')
         sites.append({'name': str(site.get('name', ''))[:80], 'hosts': names(site.get('hosts', []), 'hosts', 100, _HOST),
                       'remove': names(site.get('remove', []), 'remove', 500, _NAME),
+                      'path_product': names(site.get('path_product', []), 'path_product', 5, _NAME),
+                      'path_remove': names(site.get('path_remove', []), 'path_remove', 20, _PATH),
                       'source': str(site.get('source', ''))[:40]})
     return {
         'version': int(doc.get('version', 0)),
@@ -289,17 +292,35 @@ def clean_url(url, rules):
     if '#' in url:
         i = url.index('#')
         url, frag = url[:i], url[i:]
-    if '?' not in url:
-        return url + frag
-    head, query = url.split('?', 1)
+    head, query = url.split('?', 1) if '?' in url else (url, None)
     rest = head.split('://', 1)[1]
     host = rest.split('/', 1)[0].rsplit('@', 1)[-1].split(':', 1)[0].lower()
     if host_matches(host, rules.get('exclude_hosts', [])):
-        return head + '?' + query + frag
+        return url + frag
     remove = set(rules.get('global_remove', []))
+    path_remove, product = [], []
     for site in rules.get('sites', []):
         if host_matches(host, site.get('hosts', [])):
             remove.update(site.get('remove', []))
+            path_remove += site.get('path_remove', [])
+            product += site.get('path_product', [])
+    # Product pages: ".../Some-Title/dp/B0ABC/ref=x" becomes "/dp/B0ABC/" (the title and anything after the id go).
+    if product:
+        authority, slash, path = rest.partition('/')
+        parts = path.split('/')
+        for i, part in enumerate(parts[:-1]):
+            if part in product and parts[i + 1]:
+                short = [part, parts[i + 1]]
+                if parts != short and parts != short + ['']:
+                    head = head.split('://', 1)[0] + '://' + authority + '/' + '/'.join(short) + '/'
+                break
+    # A trailing path segment such as Amazon's "ref=sr_1_6" is dropped; the slash before it stays.
+    if path_remove and '/' in rest:
+        base, _, last = head.rpartition('/')
+        if base.count('/') >= 3 and any(last.startswith(p) for p in path_remove):
+            head = base + '/'
+    if query is None:
+        return head + frag
     kept = [p for p in query.split('&') if p and p.split('=', 1)[0] not in remove]
     new_query = '&'.join(kept)
     return head + ('?' + new_query if new_query else '') + frag

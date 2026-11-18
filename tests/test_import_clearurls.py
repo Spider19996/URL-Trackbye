@@ -45,7 +45,7 @@ class ShippedRules(unittest.TestCase):
 
     def test_things_a_page_needs_survive(self):
         rules = self.built()
-        keep = ['https://www.amazon.de/dp/B0?th=1&psc=1', 'https://www.youtube.com/watch?v=a&t=5&list=PL1',
+        keep = ['https://www.youtube.com/watch?v=a&t=5&list=PL1',
                 'https://www.google.com/search?q=hallo', 'https://github.com/o/r/tree/main?ref=dev', 'https://example.com/a?page=2&sort=asc']
         for url in keep:
             self.assertEqual(trackbye.clean_url(url, rules), url, url)
