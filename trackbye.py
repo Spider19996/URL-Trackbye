@@ -26,6 +26,8 @@ One small program with several jobs that all use the same rules (rules.json):
 Only the Python standard library is used. Rules: exact parameter names, matched per site (domain and subdomains).
 Your own additions go into ~/.config/trackbye/rules.json (same format, merged with the built-in rules).
 """
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -214,11 +216,37 @@ def load_rules():
     }
 
 
-def write_json(path, data):
+def atomic_write(path, text):
+    """Write a file so that a reader never sees half of it: a temporary file of its own (unique per call, so several
+    programs writing at the same time cannot trip over each other), then renamed over the target."""
+    folder = os.path.dirname(path)
+    os.makedirs(folder, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=os.path.basename(path) + '.', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+@contextlib.contextmanager
+def locked(path):
+    """One program at a time may read, change and write this file (the app, the clipboard helper and several browser
+    helpers all log to the same files)."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.write('\n')
+    with open(path + '.lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def write_json(path, data):
+    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + '\n')
 
 
 def user_rules():
@@ -313,12 +341,7 @@ def read_log():
 
 
 def write_log(entries):
-    os.makedirs(STATE_DIR, exist_ok=True)
-    tmp = LOG_PATH + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        for e in entries[-LOG_MAX:]:
-            f.write(json.dumps(e, ensure_ascii=False) + '\n')
-    os.replace(tmp, LOG_PATH)
+    atomic_write(LOG_PATH, ''.join(json.dumps(e, ensure_ascii=False) + '\n' for e in entries[-LOG_MAX:]))
 
 
 def clear_log():
@@ -331,6 +354,11 @@ def log_event(source, before, after):
     if before == after or not load_config().get('log', True):
         return
     now = time.time()
+    with locked(LOG_PATH):
+        _log_event_locked(source, before, after, now)
+
+
+def _log_event_locked(source, before, after, now):
     entries = read_log()
     last = entries[-1] if entries else None
     if last and last.get('src') == source and now - last.get('t', 0) < 3 and last.get('to') in (before, after):
@@ -365,26 +393,22 @@ def read_events():
 
 
 def write_events(entries):
-    os.makedirs(STATE_DIR, exist_ok=True)
-    tmp = EVENTS_PATH + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        for e in entries[-EVENTS_MAX:]:
-            f.write(json.dumps(e, ensure_ascii=False) + '\n')
-    os.replace(tmp, EVENTS_PATH)
+    atomic_write(EVENTS_PATH, ''.join(json.dumps(e, ensure_ascii=False) + '\n' for e in entries[-EVENTS_MAX:]))
 
 
 def diag(level, message, where=''):
     """Record a message. The same message within a minute is only counted, so a repeating problem does not flood it."""
     try:
         now = time.time()
-        entries = read_events()
-        last = entries[-1] if entries else None
-        if last and last.get('msg') == message and last.get('level') == level and now - last.get('t', 0) < 60:
-            last['count'] = last.get('count', 1) + 1
-            last['t'] = now
-        else:
-            entries.append({'t': now, 'level': level, 'msg': message, 'where': where, 'count': 1})
-        write_events(entries)
+        with locked(EVENTS_PATH):
+            entries = read_events()
+            last = entries[-1] if entries else None
+            if last and last.get('msg') == message and last.get('level') == level and now - last.get('t', 0) < 60:
+                last['count'] = last.get('count', 1) + 1
+                last['t'] = now
+            else:
+                entries.append({'t': now, 'level': level, 'msg': message, 'where': where, 'count': 1})
+            write_events(entries)
     except OSError:
         pass  # the log must never break the program
 
@@ -682,18 +706,19 @@ def parent_browser():
 
 def note_extension(msg):
     """The extension names its running version in every message; remember it, per browser (and when we last heard)."""
-    state = read_json(EXTENSION_STATE, {})
-    state.setdefault('version', None)  # None: an older extension that does not report its version
-    state['seen'] = time.time()
-    if msg.get('ext'):
-        state['version'] = msg['ext']
     browser = parent_browser()
-    if browser:
-        entry = state.setdefault('browsers', {}).setdefault(browser, {})
-        entry['seen'] = state['seen']
+    with locked(EXTENSION_STATE):
+        state = read_json(EXTENSION_STATE, {})
+        state.setdefault('version', None)  # None: an older extension that does not report its version
+        state['seen'] = time.time()
         if msg.get('ext'):
-            entry['version'] = msg['ext']
-    write_json(EXTENSION_STATE, state)
+            state['version'] = msg['ext']
+        if browser:
+            entry = state.setdefault('browsers', {}).setdefault(browser, {})
+            entry['seen'] = state['seen']
+            if msg.get('ext'):
+                entry['version'] = msg['ext']
+        write_json(EXTENSION_STATE, state)
 
 
 def extension_versions(max_age=3 * 86400):
