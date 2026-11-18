@@ -57,7 +57,7 @@ RELOAD_TRIGGER = os.path.join(STATE_DIR, 'reload-extension')
 DEFAULT_CONFIG = {'browser': 'vivaldi-stable', 'notify': False, 'clipboard': True, 'previous_default': '',
                   'log': True, 'tray_icon': True, 'quick': ['clipboard', 'notify'], 'native_browsers': None, 'custom_browsers': [], 'rules_auto': True, 'rules_url': ''}
 SCRIPT = os.path.realpath(__file__)
-VERSION = '0.7.0'
+VERSION = '0.7.1'
 
 
 # --------------------------------------------------------------------------------------------------------------
