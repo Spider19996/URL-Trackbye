@@ -64,6 +64,10 @@
   "https://www.amazon.de/dp/B0?th=1&psc=1"
  ],
  [
+  "https://www.amazon.de/Titel/dp/B0CF658VB8/ref=sr_1_6?dib=eyJ2IjoiMSJ9.x&dib_tag=se&keywords=a+b",
+  "https://www.amazon.de/Titel/dp/B0CF658VB8/ref=sr_1_6"
+ ],
+ [
   "https://user:pw@example.com:8080/p?utm_source=x&a=1",
   "https://user:pw@example.com:8080/p?a=1"
  ],

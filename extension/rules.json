@@ -144,7 +144,10 @@
         "sprefix",
         "linkCode",
         "linkId",
-        "content-id"
+        "content-id",
+        "dib",
+        "dib_tag",
+        "keywords"
       ]
     },
     {
