@@ -150,12 +150,42 @@
         "keywords",
         "th",
         "psc"
+      ]
+    },
+    {
+      "name": "Amazon shop pages",
+      "hosts": [
+        "www.amazon.com",
+        "www.amazon.de",
+        "www.amazon.co.uk",
+        "www.amazon.fr",
+        "www.amazon.it",
+        "www.amazon.es",
+        "www.amazon.nl"
       ],
+      "remove": [],
       "path_remove": [
         "ref="
       ],
       "path_product": [
         "dp"
+      ]
+    },
+    {
+      "name": "Amazon Luna",
+      "hosts": [
+        "luna.amazon.com",
+        "luna.amazon.de",
+        "luna.amazon.co.uk",
+        "luna.amazon.fr",
+        "luna.amazon.it",
+        "luna.amazon.es",
+        "luna.amazon.nl"
+      ],
+      "remove": [
+        "g",
+        "ingress",
+        "yTwchPos"
       ]
     },
     {
