@@ -110,7 +110,18 @@ def setup():
     return 0
 
 
+KNOWN_OPTIONS = {'--setup', '--dry-run', '-h', '--help'}
+
+
 def main():
+    # Signing uploads to Mozilla, so it only starts without arguments; anything unknown stops here.
+    if '-h' in sys.argv or '--help' in sys.argv:
+        print(__doc__)
+        return 0
+    unknown = [a for a in sys.argv[1:] if a not in KNOWN_OPTIONS]
+    if unknown:
+        print('Unknown option: %s (nothing was sent). See --help.' % ' '.join(unknown), file=sys.stderr)
+        return 2
     if '--setup' in sys.argv:
         return setup()
     dry = '--dry-run' in sys.argv

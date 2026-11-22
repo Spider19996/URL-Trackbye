@@ -51,5 +51,25 @@ class Signing(unittest.TestCase):
             self.assertIsNone(pattern.search(text), 'looks like a credential in ' + name)
 
 
+class Options(unittest.TestCase):
+    def run_tool(self, *args):
+        # Credentials point to nowhere: if an option wrongly started the upload, it would fail differently.
+        env = {k: v for k, v in os.environ.items() if not k.startswith('AMO_')}
+        env['XDG_CONFIG_HOME'] = '/nonexistent'
+        return subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'sign_firefox.py')] + list(args),
+                              capture_output=True, text=True, env=env, timeout=60)
+
+    def test_help_prints_help_and_sends_nothing(self):
+        result = self.run_tool('--help')
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('--dry-run', result.stdout)
+        self.assertNotIn('waiting for the signature', result.stdout)
+
+    def test_unknown_option_stops(self):
+        result = self.run_tool('--hepl')
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('nothing was sent', result.stderr)
+
+
 if __name__ == '__main__':
     unittest.main()
