@@ -150,7 +150,25 @@
         "dib_tag",
         "keywords",
         "th",
-        "psc"
+        "psc",
+        "__mk_de_DE",
+        "__mk_en_GB",
+        "__mk_es_ES",
+        "__mk_fr_FR",
+        "__mk_it_IT",
+        "__mk_nl_NL",
+        "__mk_pl_PL",
+        "__mk_sv_SE",
+        "__mk_tr_TR",
+        "__mk_pt_BR",
+        "__mk_es_MX",
+        "__mk_fr_CA",
+        "__mk_ja_JP",
+        "__mk_zh_CN",
+        "__mk_ar_AE",
+        "__mk_nl_BE",
+        "__mk_fr_BE",
+        "__mk_en_US"
       ]
     },
     {
